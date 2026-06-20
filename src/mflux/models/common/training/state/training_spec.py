@@ -99,6 +99,8 @@ class OptimizerSpec:
     # (e.g. weight_decay, betas, eps). Without this, any optimizer hyperparameter
     # other than the learning rate silently falls back to the MLX default.
     optimizer_params: dict = field(default_factory=dict)
+    # Global-norm gradient clipping; None = off (preserves prior behavior).
+    max_grad_norm: float | None = None
 
 
 @dataclass

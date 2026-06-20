@@ -7,6 +7,7 @@ from pathlib import Path
 
 import mlx.core as mx
 from mlx import nn
+from mlx.optimizers import clip_grad_norm
 from mlx.utils import tree_unflatten
 from PIL import Image as PILImage
 from tqdm import tqdm
@@ -161,6 +162,7 @@ class TrainingTrainer:
             initial=training_state.iterator.num_iterations,
         )
 
+        max_grad_norm = training_spec.optimizer.max_grad_norm
         nonfinite_skips = 0
         for batch in batches:
             loss, grads = train_step_function(batch)
@@ -170,6 +172,8 @@ class TrainingTrainer:
                 if training_spec.low_ram:
                     mx.clear_cache()
                 continue
+            if max_grad_norm is not None:
+                grads, _ = clip_grad_norm(grads, max_grad_norm)
             training_state.optimizer.optimizer.update(model=adapter.model(), gradients=grads)
             mx.eval(adapter.model().parameters(), training_state.optimizer.optimizer.state)
             del loss, grads
