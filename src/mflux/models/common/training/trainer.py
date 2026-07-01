@@ -139,16 +139,18 @@ class TrainingTrainer:
 
         for batch in batches:
             loss, grads = train_step_function(batch)
+            # Capture the training loss (already computed here with the gradients) for the plot.
+            train_loss = float(loss)
             training_state.optimizer.optimizer.update(model=adapter.model(), gradients=grads)
             mx.eval(adapter.model().parameters(), training_state.optimizer.optimizer.state)
             del loss, grads
 
             if training_state.should_plot_loss(training_spec):
-                validation_batch = training_state.iterator.get_validation_batch()
-                validation_loss = TrainingTrainer.compute_loss(adapter, training_spec, base_config, validation_batch)
-                training_state.statistics.append_values(step=training_state.iterator.num_iterations, loss=float(validation_loss))  # fmt: off
+                # Plot the already-computed training loss (free) instead of a separate forward pass
+                # over the same samples each plot step (there is no held-out validation set); that
+                # recompute was the dominant per-step cost on larger models.
+                training_state.statistics.append_values(step=training_state.iterator.num_iterations, loss=train_loss)  # fmt: off
                 Plotter.update_loss_plot(training_spec=training_spec, training_state=training_state)
-                del validation_loss
 
             if training_state.should_generate_image(training_spec):
                 TrainingTrainer._generate_previews_with_optimizer_offload(adapter, training_spec, training_state)
