@@ -234,7 +234,10 @@ AVAILABLE_MODELS = {
         max_sequence_length=1024,
         supports_guidance=True,
         requires_sigma_shift=True,
+        # Per krea/Krea-2-Raw scheduler_config.json: base_shift 0.5, max_shift 1.15,
+        # base/max image seq len 256/6400, exponential dynamic shifting.
         sigma_max_shift=1.15,
+        sigma_max_seq_len=6400,
     ),
     "dev": ModelConfig(
         priority=0,
