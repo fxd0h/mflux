@@ -263,6 +263,7 @@ AVAILABLE_MODELS = {
         supports_guidance=True,
         requires_sigma_shift=True,
         sigma_max_shift=1.15,
+        sigma_max_seq_len=6400,
     ),
     "dev": ModelConfig(
         priority=0,
