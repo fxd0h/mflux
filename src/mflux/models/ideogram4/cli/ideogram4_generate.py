@@ -1,4 +1,3 @@
-import warnings
 
 from mflux.callbacks.callback_manager import CallbackManager
 from mflux.cli.parser.parsers import CommandLineParser, lora_init_kwargs_from_args
@@ -12,7 +11,16 @@ from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationExcep
 from mflux.utils.prompt_util import PromptUtil
 
 
-def main():
+# Single source of truth for options this CLI accepts but cannot honour: the runtime
+# warning and the mflux-capabilities dump both read it.
+IGNORED_OPTIONS = {
+    "--steps": "Ideogram 4 presets define the step count.",
+    "--guidance": "Ideogram 4 presets define the guidance schedule.",
+    "--negative-prompt": "Ideogram 4's CFG negative is the empty prompt; a user negative is never encoded.",
+}
+
+
+def build_parser() -> CommandLineParser:
     parser = CommandLineParser(description="Generate an image using Ideogram 4.")
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False)
@@ -38,6 +46,11 @@ def main():
         help="Fraction of steps (0-1) that run CFG; the remaining steps run cond-only "
         "(guidance 1.0, skipping the unconditional forward). Lower = faster. Default: full CFG.",
     )
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
 
     model_name = args.model or "ideogram4"
@@ -47,10 +60,7 @@ def main():
     else:
         model_config = ModelConfig.ideogram4_fp8()
         model_path = args.model_path
-    if CommandLineParser._option_was_provided("--steps"):
-        warnings.warn("--steps is ignored; Ideogram 4 presets define the step count.", stacklevel=1)
-    if CommandLineParser._option_was_provided("--guidance"):
-        warnings.warn("--guidance is ignored; Ideogram 4 presets define the guidance schedule.", stacklevel=1)
+    CommandLineParser.warn_ignored_options(IGNORED_OPTIONS)
 
     model = Ideogram4(
         model_config=model_config,

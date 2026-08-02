@@ -12,8 +12,7 @@ DEFAULT_STEPS = 8
 DEFAULT_GUIDANCE = 1.0
 
 
-def main():
-    # 0. Parse command line arguments
+def build_parser() -> CommandLineParser:
     parser = CommandLineParser(description="Generate an image using Krea-2 based on a prompt.")
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False)
@@ -21,6 +20,12 @@ def main():
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
     parser.add_image_to_image_arguments(required=False)
     parser.add_output_arguments()
+    return parser
+
+
+def main():
+    # 0. Parse command line arguments
+    parser = build_parser()
     args = parser.parse_args()
 
     # 1. Load the model
