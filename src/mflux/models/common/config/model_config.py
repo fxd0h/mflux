@@ -180,6 +180,11 @@ class ModelConfig:
 
     @staticmethod
     @lru_cache
+    def lens_turbo() -> "ModelConfig":
+        return AVAILABLE_MODELS["lens-turbo"]
+
+    @staticmethod
+    @lru_cache
     def z_image_turbo() -> "ModelConfig":
         return AVAILABLE_MODELS["z-image-turbo"]
 
@@ -587,6 +592,18 @@ AVAILABLE_MODELS = {
         num_train_steps=1000,
         max_sequence_length=512,
         supports_guidance=True,
+        requires_sigma_shift=True,
+    ),
+    "lens-turbo": ModelConfig(
+        priority=22,
+        aliases=["lens-turbo", "lens"],
+        model_name="Comfy-Org/Lens",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model=None,
+        num_train_steps=1000,
+        max_sequence_length=512,
+        supports_guidance=False,  # 4-step distillation, CFG internalized
         requires_sigma_shift=True,
     ),
     "z-image-turbo": ModelConfig(
