@@ -64,6 +64,7 @@ class ZImageControlnetUtil:
         width: int,
         height: int,
         controls: list[ControlSpec],
+        control_in_dim: int = 33,
     ) -> EncodedControls:
         if len(controls) == 0:
             raise ValueError("At least one control must be provided.")
@@ -82,10 +83,14 @@ class ZImageControlnetUtil:
             latent = vae.encode(arr)  # (1, 16, 1, H/8, W/8)
             latent = ZImageLatentCreator.pack_latents(latent, height=height, width=width)  # (16, 1, H/8, W/8)
 
-            # Diffusers ZImageControlNetPipeline behavior:
-            # If base latents are 16ch but ControlNet expects 33ch, pad the control latents with zeros to 33ch.
-            if latent.shape[0] < 33:
-                padding = mx.zeros((33 - latent.shape[0], *latent.shape[1:]), dtype=latent.dtype)
+            # Diffusers ZImageControlNetPipeline behavior: pad the 16ch base latents with zeros up
+            # to the ControlNet's configured input dim (33 for Union 2.1).
+            if latent.shape[0] > control_in_dim:
+                raise ValueError(
+                    f"Control latents have {latent.shape[0]} channels but the ControlNet expects {control_in_dim}."
+                )
+            if latent.shape[0] < control_in_dim:
+                padding = mx.zeros((control_in_dim - latent.shape[0], *latent.shape[1:]), dtype=latent.dtype)
                 latent = mx.concatenate([latent, padding], axis=0)
 
             control_latents.append(latent)
@@ -125,6 +130,11 @@ class ZImageControlnetUtil:
     def _mlsd(img: PIL.Image.Image) -> PIL.Image.Image:
         # Straight line segments as white strokes on black, approximating the MLSD hint with OpenCV's
         # LSD (no neural model). Good for architecture and interiors where the strong cues are edges.
+        if not hasattr(cv2, "createLineSegmentDetector"):
+            raise RuntimeError(
+                "The mlsd control needs OpenCV's LineSegmentDetector, which opencv-python 4.1 through "
+                "4.7 does not ship. Install opencv-python>=4.8."
+            )
         gray_u8 = np.array(img.convert("L"), dtype=np.uint8)
         lines = cv2.createLineSegmentDetector().detect(gray_u8)[0]
         canvas = np.zeros((gray_u8.shape[0], gray_u8.shape[1], 3), dtype=np.uint8)

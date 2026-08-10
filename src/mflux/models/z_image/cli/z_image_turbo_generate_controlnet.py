@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from mflux.callbacks.callback_manager import CallbackManager
@@ -25,10 +26,14 @@ def _parse_control_spec(spec: str) -> ControlSpec:
     if len(parts) >= 3:
         # If the last segment parses as float, treat it as strength
         try:
-            strength = float(parts[-1])
-            path_parts = parts[1:-1]
+            parsed = float(parts[-1])
         except ValueError:
-            strength = 1.0
+            parsed = None
+        if parsed is not None:
+            if not math.isfinite(parsed):
+                raise ValueError(f"Invalid --control spec {spec!r}. Strength must be a finite number.")
+            strength = parsed
+            path_parts = parts[1:-1]
 
     image_path = ":".join(path_parts)
     if not image_path:
@@ -57,6 +62,12 @@ def main():
             f"Use z-image-controlnet (the default) or a repo/path carrying a Union ControlNet checkpoint."
         )
 
+    # Parse controls before the expensive model construction so a malformed spec fails fast.
+    try:
+        controls = [_parse_control_spec(s) for s in args.control]
+    except ValueError as e:
+        parser.error(str(e))
+
     model = ZImageTurboControlnet(
         model_config=model_config,
         quantize=args.quantize,
@@ -70,8 +81,6 @@ def main():
         model=model,
         latent_creator=ZImageLatentCreator,
     )
-
-    controls = [_parse_control_spec(s) for s in args.control]
 
     try:
         for seed in args.seed:

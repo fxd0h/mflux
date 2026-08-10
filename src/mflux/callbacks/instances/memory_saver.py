@@ -100,6 +100,8 @@ class MemorySaver(BeforeLoopCallback, InLoopCallback, AfterLoopCallback):
         self.model.transformer = None
         if hasattr(self.model, "transformer_controlnet"):
             self.model.transformer_controlnet = None
+        if hasattr(self.model, "controlnet"):
+            self.model.controlnet = None
         if hasattr(self.model, "conditional_transformer"):
             self.model.conditional_transformer = None
         if hasattr(self.model, "unconditional_transformer"):

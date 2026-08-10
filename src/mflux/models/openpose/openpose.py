@@ -162,6 +162,8 @@ class OpenPoseBody:
                     if subset[j][index_a] == part_as[i] or subset[j][index_b] == part_bs[i]:
                         rows[found] = j
                         found += 1
+                        if found == 2:
+                            break
                 if found == 1:
                     j = rows[0]
                     if subset[j][index_b] != part_bs[i]:
@@ -203,8 +205,11 @@ class OpenPoseBody:
                 length = float(np.hypot(my_[0] - my_[1], mx_[0] - mx_[1]))
                 angle = float(np.degrees(np.arctan2(my_[0] - my_[1], mx_[0] - mx_[1])))
                 poly = cv2.ellipse2Poly((int(mx_.mean()), int(my_.mean())), (int(length / 2), 4), int(angle), 0, 360, 1)
-                cv2.fillConvexPoly(canvas, poly, _COLORS[i])
-        canvas = (canvas * 0.6).astype(np.uint8)
+                # Reference (controlnet_aux) blends each limb into the canvas at 0.6 so overlapping
+                # limbs mix instead of the later one replacing the earlier one.
+                cur_canvas = canvas.copy()
+                cv2.fillConvexPoly(cur_canvas, poly, _COLORS[i])
+                canvas = cv2.addWeighted(canvas, 0.4, cur_canvas, 0.6, 0)
         for i in range(18):
             for person in subset:
                 idx = int(person[i])

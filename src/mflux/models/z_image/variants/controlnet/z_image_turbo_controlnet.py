@@ -85,6 +85,7 @@ class ZImageTurboControlnet(nn.Module):
             width=config.width,
             height=config.height,
             controls=controls,
+            control_in_dim=self.controlnet.config.control_in_dim,
         )
 
         # 4) Callbacks
@@ -102,7 +103,8 @@ class ZImageTurboControlnet(nn.Module):
                         sigmas=config.scheduler.sigmas,
                         cap_feats=text_encodings,
                         control_context=control_latent,
-                        conditioning_scale=float(config.controlnet_strength or 1.0) * float(control_scale),
+                        conditioning_scale=(1.0 if config.controlnet_strength is None else float(config.controlnet_strength))
+                        * float(control_scale),
                     )
                     for k, v in samples.items():
                         merged[k] = merged[k] + v if k in merged else v

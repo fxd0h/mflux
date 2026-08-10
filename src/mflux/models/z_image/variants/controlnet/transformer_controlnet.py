@@ -9,6 +9,13 @@ import mlx.core as mx
 from huggingface_hub import snapshot_download
 from mlx import nn
 
+try:
+    from httpx import ProxyError as _ProxyError
+except ImportError:  # httpx rides in with huggingface_hub 1.x; degrade gracefully without it
+
+    class _ProxyError(Exception):
+        pass
+
 from mflux.models.z_image.model.z_image_transformer.transformer import ZImageTransformer
 from mflux.models.z_image.model.z_image_transformer.transformer_block import ZImageTransformerBlock
 
@@ -53,12 +60,14 @@ class ZImageControlNetConfig:
     @staticmethod
     def from_pretrained(repo_id: str) -> "ZImageControlNetConfig":
         try:
-            root = Path(snapshot_download(repo_id=repo_id, allow_patterns=["config.json"]))
+            local = Path(repo_id)
+            # A saved model passes a local directory; read its config.json without touching the hub.
+            root = local if local.is_dir() else Path(snapshot_download(repo_id=repo_id, allow_patterns=["config.json"]))
             cfg_path = root / "config.json"
             if not cfg_path.exists():
                 return ZImageControlNetConfig.defaults_union_2_1()
             cfg = json.loads(cfg_path.read_text())
-        except (OSError, ValueError, RuntimeError):
+        except (OSError, ValueError, RuntimeError, _ProxyError):
             return ZImageControlNetConfig.defaults_union_2_1()
 
         # Fall back to the documented-correct Union 2.1 values (strided placement, control_in_dim 33)
@@ -205,12 +214,15 @@ class ZImageControlNet(nn.Module):
                 )
                 for i in range(config.n_refiner_layers)
             ]
-        else:
+        elif config.add_control_noise_refiner is None:
             # Legacy / fallback: use standard transformer blocks
             self.control_noise_refiner = [
                 ZImageTransformerBlock(config.dim, config.n_heads, config.norm_eps, config.qk_norm)
                 for _ in range(config.n_refiner_layers)
             ]
+        else:
+            # Fail before any weights download; __call__ would reject this value anyway.
+            raise ValueError(f"Unsupported add_control_noise_refiner={config.add_control_noise_refiner!r}")
 
         # Shared modules from base transformer (set via from_transformer)
         self.t_scale: Optional[float] = None

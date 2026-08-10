@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import random
 import sys
 import time
@@ -10,6 +11,13 @@ from mflux.cli.defaults import defaults as ui_defaults
 from mflux.models.common.resolution.lora_resolution import LoraResolution
 from mflux.models.flux.variants.in_context.utils.in_context_loras import LORA_NAME_MAP
 from mflux.utils import box_values, scale_factor
+
+
+def finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError(f"expected a finite number, got {value!r}")
+    return parsed
 
 
 class ModelSpecAction(argparse.Action):
@@ -215,7 +223,7 @@ class CommandLineParser(argparse.ArgumentParser):
         )
         self.add_argument(
             "--controlnet-strength",
-            type=float,
+            type=finite_float,
             default=ui_defaults.CONTROLNET_STRENGTH,
             help=f"Global multiplier applied to all controls. (Default is {ui_defaults.CONTROLNET_STRENGTH})",
         )

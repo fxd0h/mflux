@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from mflux.callbacks.callback_registry import CallbackRegistry
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
@@ -97,14 +99,27 @@ class ZImageInitializer:
             lora_scales=lora_scales,
         )
 
-        # Load ControlNet config (best-effort) + weights
-        controlnet_cfg = ZImageControlNetConfig.from_pretrained(model_config.controlnet_model)
-        controlnet_component = ZImageControlnetWeightDefinition.get_controlnet_component()
-        controlnet_weights = WeightLoader.load_single(
-            component=controlnet_component,
-            repo_id=model_config.controlnet_model,
-            file_pattern=ZImageInitializer._controlnet_file_pattern(model_config.controlnet_model),
-        )
+        # Load ControlNet config (best-effort) + weights. A model saved with mflux-save carries
+        # its controlnet under controlnet/; honor it so offline reloads work and saved weights are
+        # not silently swapped for the remote checkpoint.
+        local_root = Path(model_path) if model_path is not None else None
+        if local_root is not None and any((local_root / "controlnet").glob("*.safetensors")):
+            controlnet_cfg = ZImageControlNetConfig.from_pretrained(str(local_root / "controlnet"))
+            controlnet_component = next(
+                c for c in ZImageControlnetWeightDefinition.get_components() if c.name == "controlnet"
+            )
+            controlnet_weights = WeightLoader.load_single_local(
+                component=controlnet_component,
+                root_path=local_root,
+            )
+        else:
+            controlnet_cfg = ZImageControlNetConfig.from_pretrained(model_config.controlnet_model)
+            controlnet_component = ZImageControlnetWeightDefinition.get_controlnet_component()
+            controlnet_weights = WeightLoader.load_single(
+                component=controlnet_component,
+                repo_id=model_config.controlnet_model,
+                file_pattern=ZImageInitializer._controlnet_file_pattern(model_config.controlnet_model),
+            )
 
         model.controlnet = ZImageControlNet(config=controlnet_cfg)
         model.controlnet = ZImageControlNet.from_transformer(model.controlnet, model.transformer)
