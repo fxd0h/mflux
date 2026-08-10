@@ -216,7 +216,7 @@ class ModelConfig:
 
     @staticmethod
     def from_name(
-        model_name: str,
+        model_name: str | None,
         base_model: Literal["dev", "schnell", "krea-dev"] | None = None,
     ) -> "ModelConfig":
         return ConfigResolution.resolve(model_name=model_name, base_model=base_model)

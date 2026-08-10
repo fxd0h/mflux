@@ -20,7 +20,7 @@ class ConfigResolution:
     )
 
     @staticmethod
-    def resolve(model_name: str, base_model: str | None = None) -> "ModelConfig":
+    def resolve(model_name: str | None, base_model: str | None = None) -> "ModelConfig":
         from mflux.models.common.config.model_config import AVAILABLE_MODELS, ModelConfig
         from mflux.utils.exceptions import InvalidBaseModel, ModelConfigError
 
