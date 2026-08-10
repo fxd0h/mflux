@@ -82,7 +82,7 @@ def test_full_dump_serializes_to_every_format(caps):
     for command in caps["commands"]:
         for option in command["options"]:
             default = option["parser_default"]
-            assert default is None or isinstance(default, (str, int, float, bool, list)), (
+            assert default is None or isinstance(default, (str, int, float, bool, list, dict)), (
                 f"{command['command']} {option['flag']} default is {type(default).__name__}"
             )
 
@@ -125,6 +125,14 @@ def test_controlnet_guidance_is_conditional_on_the_resolved_model(caps):
     assert option["status"] == "conditional"
     assert "schnell" in option["condition"]
     assert option["reason"]
+
+
+@pytest.mark.fast
+def test_capabilities_lambda_converter_publishes_default_type():
+    caps = capabilities.build_capabilities()
+    for command in caps["commands"]:
+        for option in command["options"]:
+            assert option["type"] != "<lambda>", f"{command['command']} {option['flag']} leaks <lambda>"
 
 
 @pytest.mark.fast

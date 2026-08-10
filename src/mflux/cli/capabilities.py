@@ -50,7 +50,13 @@ def _option_type_name(action: argparse.Action) -> str:
         return "bool"
     if action.type is None:
         return "str"
-    return getattr(action.type, "__name__", str(action.type))
+    name = getattr(action.type, "__name__", str(action.type))
+    if name == "<lambda>":
+        # An anonymous converter has no publishable name; the default's type is the
+        # closest truthful description of what the option yields (e.g. int for the
+        # clamped battery-percentage converter).
+        return type(action.default).__name__ if action.default is not None else "str"
+    return name
 
 
 def _jsonable(value: Any) -> Any:
