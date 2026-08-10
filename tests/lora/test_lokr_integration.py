@@ -48,7 +48,7 @@ class _Flux1Transformer(nn.Module):
         self.single_transformer_blocks = [_Flux1Block()]
 
 
-@pytest.mark.slow
+@pytest.mark.fast
 def test_flux2_klein_lokr_safetensors_apply_layers(tmp_path):
     lora_path = tmp_path / "klein_lycoris_lokr.safetensors"
     mx.save_safetensors(
@@ -122,7 +122,7 @@ def test_flux2_klein_lokr_load_skips_bake_when_disabled(tmp_path):
     assert isinstance(transformer.single_transformer_blocks[0].attn.to_qkv_mlp_proj, LoKrLinear)
 
 
-@pytest.mark.slow
+@pytest.mark.fast
 def test_flux1_lycoris_lokr_safetensors_apply_layers(tmp_path):
     lora_path = tmp_path / "flux1_lycoris_lokr.safetensors"
     mx.save_safetensors(
