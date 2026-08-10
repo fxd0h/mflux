@@ -18,6 +18,8 @@ def _clean_tolerance_env(monkeypatch):
     # "default" means in the assertions below.
     monkeypatch.delenv("MFLUX_IMAGE_ALLCLOSE_ATOL", raising=False)
     monkeypatch.delenv("MFLUX_IMAGE_ALLCLOSE_RTOL", raising=False)
+    # The mismatch threshold is captured at import time, so delenv cannot isolate it.
+    monkeypatch.setattr(ImageCompare, "ENV_MISMATCH_THRESHOLD", ImageCompare.DEFAULT_MISMATCH_THRESHOLD)
 
 
 @pytest.fixture
