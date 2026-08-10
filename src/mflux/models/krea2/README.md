@@ -130,13 +130,13 @@ A minimal config (QLoRA over the q8 base, attention + MLP on all 28 blocks):
   "optimizer": { "name": "AdamW", "learning_rate": 2e-4 },
   "checkpoint": { "output_path": "output", "save_frequency": 96 },
   "lora_layers": { "targets": [
-    { "module_path": "transformer_blocks.{block}.attn.to_q",     "blocks": { "start": 0, "end": 28 }, "rank": 16 },
-    { "module_path": "transformer_blocks.{block}.attn.to_k",     "blocks": { "start": 0, "end": 28 }, "rank": 16 },
-    { "module_path": "transformer_blocks.{block}.attn.to_v",     "blocks": { "start": 0, "end": 28 }, "rank": 16 },
-    { "module_path": "transformer_blocks.{block}.attn.to_out.0", "blocks": { "start": 0, "end": 28 }, "rank": 16 },
-    { "module_path": "transformer_blocks.{block}.ff.gate",       "blocks": { "start": 0, "end": 28 }, "rank": 16 },
-    { "module_path": "transformer_blocks.{block}.ff.up",         "blocks": { "start": 0, "end": 28 }, "rank": 16 },
-    { "module_path": "transformer_blocks.{block}.ff.down",       "blocks": { "start": 0, "end": 28 }, "rank": 16 }
+    { "module_path": "blocks.{block}.attn.wq",     "blocks": { "start": 0, "end": 28 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn.wk",     "blocks": { "start": 0, "end": 28 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn.wv",     "blocks": { "start": 0, "end": 28 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn.wo", "blocks": { "start": 0, "end": 28 }, "rank": 16 },
+    { "module_path": "blocks.{block}.mlp.gate",       "blocks": { "start": 0, "end": 28 }, "rank": 16 },
+    { "module_path": "blocks.{block}.mlp.up",         "blocks": { "start": 0, "end": 28 }, "rank": 16 },
+    { "module_path": "blocks.{block}.mlp.down",       "blocks": { "start": 0, "end": 28 }, "rank": 16 }
   ] }
 }
 ```

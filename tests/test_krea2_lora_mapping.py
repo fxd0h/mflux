@@ -185,3 +185,16 @@ class TestKrea2LoRAMapping:
 
         noise = Krea2LatentCreator.create_noise(seed=0, height=1024, width=1024)
         assert noise.shape == (1, 16, 128, 128)
+
+
+def test_download_patterns_cover_both_variants():
+    from mflux.models.krea2.weights.krea2_weight_definition import Krea2WeightDefinition
+
+    turbo = Krea2WeightDefinition.get_download_patterns("krea-2")
+    raw = Krea2WeightDefinition.get_download_patterns("krea-2-raw")
+    # Turbo uses the native single-file checkpoint and skips the redundant diffusers shards.
+    assert "turbo.safetensors" in turbo
+    assert not any(p.startswith("transformer/") for p in turbo)
+    # The Raw repo ships only the diffusers transformer/ dir; a fresh load must fetch it.
+    assert any(p.startswith("transformer/") for p in raw)
+    assert "turbo.safetensors" not in raw
