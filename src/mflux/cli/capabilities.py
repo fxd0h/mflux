@@ -10,7 +10,8 @@ Self-healing by construction, with no hand-maintained registry to rot:
   model), and the dump does not claim what it cannot introspect; declared runtime defaults
   are schema-v2 material.
 - The honoured/ignored classification is read from the same module-level
-  ``IGNORED_OPTIONS`` / ``CONDITIONAL_OPTIONS`` constants the runtime warnings use, so the
+  ``IGNORED_OPTIONS`` / ``CONDITIONAL_OPTIONS`` / ``REJECTED_OPTIONS`` constants the runtime
+  warnings and errors use, so the
   dump and the warnings cannot disagree.
 - A CLI that has not adopted the ``build_parser()`` convention is still listed, marked
   ``"coverage": "runtime-only"`` instead of being silently omitted.
@@ -75,8 +76,13 @@ def _jsonable(value: Any) -> Any:
     return str(value)
 
 
-def _describe_option(action: argparse.Action, ignored: dict, conditional: dict) -> dict[str, Any]:
-    flag = max(action.option_strings, key=len)
+def _describe_option(action: argparse.Action, ignored: dict, conditional: dict, rejected: dict) -> dict[str, Any]:
+    if isinstance(action, argparse.BooleanOptionalAction):
+        # argparse registers the positive form first; publishing the longest string would make
+        # the negated --no-* flag canonical while parser_default stays True.
+        flag = action.option_strings[0]
+    else:
+        flag = max(action.option_strings, key=len)
     record: dict[str, Any] = {
         "flag": flag,
         "type": _option_type_name(action),
@@ -93,7 +99,10 @@ def _describe_option(action: argparse.Action, ignored: dict, conditional: dict) 
         record["nargs"] = str(action.nargs)
     if action.help:
         record["help"] = action.help
-    if flag in ignored:
+    if flag in rejected:
+        record["status"] = "rejected"
+        record["reason"] = rejected[flag]
+    elif flag in ignored:
         record["status"] = "ignored"
         record["reason"] = ignored[flag]
     elif flag in conditional:
@@ -141,13 +150,26 @@ def describe_command(command: str, module_path: str) -> dict[str, Any]:
     parser = build_parser()
     ignored = getattr(module, "IGNORED_OPTIONS", {})
     conditional = getattr(module, "CONDITIONAL_OPTIONS", {})
+    rejected = getattr(module, "REJECTED_OPTIONS", {})
     entry["coverage"] = "full"
     entry["description"] = parser.description
-    entry["options"] = [
-        _describe_option(action, ignored, conditional)
+    records = {
+        id(action): _describe_option(action, ignored, conditional, rejected)
         for action in parser._actions
         if action.option_strings and "-h" not in action.option_strings
-    ]
+    }
+    # A required mutually-exclusive group is invisible on the per-option records: each member
+    # looks optional, so a contract-built invocation can omit all of them and exit 2. Publish
+    # the group so generators know exactly one member is required.
+    for group_idx, group in enumerate(parser._mutually_exclusive_groups):
+        for action in group._group_actions:
+            record = records.get(id(action))
+            if record is None:
+                continue
+            record["choice_group"] = group_idx
+            if group.required:
+                record["choice_required"] = True
+    entry["options"] = list(records.values())
     entry["traits"] = _traits(parser, module)
     return entry
 

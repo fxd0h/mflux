@@ -7,6 +7,17 @@ from mflux.utils.dimension_resolver import DimensionResolver
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
 from mflux.utils.prompt_util import PromptUtil
 
+IGNORED_OPTIONS = {
+    "--negative-prompt": "turbo pins guidance to 1.0, so there is no unconditional pass for a negative prompt to steer.",
+}
+
+CONDITIONAL_OPTIONS = {
+    "--guidance": {
+        "condition": "must be 1.0",
+        "reason": "turbo is guidance-distilled; any other value exits with an error.",
+    },
+}
+
 
 def build_parser() -> CommandLineParser:
     parser = CommandLineParser(

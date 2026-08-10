@@ -40,7 +40,7 @@ def test_option_records_are_well_formed(caps):
     for command in caps["commands"]:
         for option in command["options"]:
             assert option["flag"].startswith("--")
-            assert option["status"] in ("honored", "ignored", "conditional")
+            assert option["status"] in ("honored", "ignored", "conditional", "rejected")
             if option["status"] == "ignored":
                 assert option["reason"]
             if option["status"] == "conditional":
@@ -145,3 +145,46 @@ def test_jsonable_preserves_mappings():
     assert capabilities._jsonable([Path("a"), 2]) == ["a", 2]
     with pytest.raises(ValueError, match="loses keys"):
         capabilities._jsonable({1: "a", "1": "b"})
+
+
+@pytest.mark.fast
+def test_boolean_optional_flags_publish_the_positive_form():
+    caps = capabilities.build_capabilities()
+    for command in caps["commands"]:
+        for option in command["options"]:
+            if option["flag"].startswith("--no-"):
+                # A negated canonical flag with a truthy default describes the option backwards.
+                assert option["parser_default"] is not True, (
+                    f"{command['command']} publishes {option['flag']} as canonical with default true"
+                )
+
+
+@pytest.mark.fast
+def test_required_prompt_group_is_published_as_a_required_choice():
+    caps = capabilities.build_capabilities()
+    # mflux-generate-controlnet requires exactly one of --prompt/--prompt-file; a contract
+    # that publishes both as plain optional flags builds invocations that exit 2.
+    command = next(c for c in caps["commands"] if c["command"] == "mflux-generate-controlnet")
+    by_flag = {o["flag"]: o for o in command["options"]}
+    prompt, prompt_file = by_flag["--prompt"], by_flag["--prompt-file"]
+    assert prompt.get("choice_required") is True
+    assert prompt_file.get("choice_required") is True
+    assert prompt["choice_group"] == prompt_file["choice_group"]
+
+
+@pytest.mark.fast
+def test_flux2_negative_prompt_is_rejected_not_honored():
+    caps = capabilities.build_capabilities()
+    for name in ("mflux-generate-flux2", "mflux-generate-flux2-edit"):
+        command = next(c for c in caps["commands"] if c["command"] == name)
+        option = next(o for o in command["options"] if o["flag"] == "--negative-prompt")
+        assert option["status"] == "rejected", f"{name} publishes --negative-prompt as {option['status']}"
+
+
+@pytest.mark.fast
+def test_dropped_negative_prompts_are_not_honored():
+    caps = capabilities.build_capabilities()
+    for name, expected in (("mflux-generate-krea2", "conditional"), ("mflux-generate-ernie-image-turbo", "ignored")):
+        command = next(c for c in caps["commands"] if c["command"] == name)
+        option = next(o for o in command["options"] if o["flag"] == "--negative-prompt")
+        assert option["status"] == expected, f"{name} publishes --negative-prompt as {option['status']}"

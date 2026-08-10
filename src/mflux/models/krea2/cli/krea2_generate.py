@@ -12,6 +12,14 @@ DEFAULT_STEPS = 8
 DEFAULT_GUIDANCE = 1.0
 
 
+CONDITIONAL_OPTIONS = {
+    "--negative-prompt": {
+        "condition": "guidance above 1.0",
+        "reason": "at the distilled default there is no unconditional pass, so the negative prompt has no effect.",
+    },
+}
+
+
 def build_parser() -> CommandLineParser:
     parser = CommandLineParser(description="Generate an image using Krea-2 based on a prompt.")
     parser.add_general_arguments()
