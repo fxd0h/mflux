@@ -23,6 +23,7 @@ def build_parser() -> CommandLineParser:
     parser.add_lora_arguments()
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
     parser.add_image_to_image_arguments(required=False)
+    parser.add_pid_decode_arguments()
     parser.add_output_arguments()
     return parser
 
@@ -68,6 +69,8 @@ def main():
                 image_strength=args.image_strength,
                 scheduler=args.scheduler,
                 negative_prompt=args.negative_prompt,
+                pid_decode=args.pid_decode,
+                pid_degrade_sigma=args.pid_degrade_sigma,
             )
             # 4. Save the image
             image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata)
