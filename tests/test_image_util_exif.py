@@ -80,3 +80,30 @@ def test_dimension_resolver_agrees_with_the_loader_on_rotated_files(tmp_path):
 
     # Both are portrait, or both are landscape: the resolver must not invert the target.
     assert (width < height) == (loaded_width < loaded_height)
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("orientation", [1, 2, 3, 4, 5, 6, 7, 8])
+def test_oriented_size_agrees_with_the_loader_for_every_orientation(tmp_path, orientation):
+    # Half the tag values transpose the axes and half only mirror. The size helper has to
+    # split them exactly as exif_transpose does, or a caller that measures disagrees with
+    # the caller that loads, which is the whole failure this module exists to prevent.
+    path = tmp_path / f"orientation_{orientation}.jpg"
+    _save_with_orientation(path, orientation=orientation)
+
+    assert oriented_size(path) == ImageUtil.load_image(path).size
+
+
+@pytest.mark.fast
+def test_open_oriented_mirrors_without_transposing(tmp_path):
+    # Orientation 2 is a horizontal mirror: the size is unchanged, so only the pixels can
+    # show whether the transform ran at all.
+    path = tmp_path / "mirrored.jpg"
+    _save_with_orientation(path, orientation=2)
+
+    loaded = ImageUtil.load_image(path)
+
+    assert loaded.size == (4, 2)
+    # The red column was on the left in storage and must come back on the right.
+    assert loaded.getpixel((3, 0))[0] > 128
+    assert loaded.getpixel((0, 0))[2] > 128
