@@ -54,7 +54,7 @@ class TestCaptureHiddenStates:
             num_experts_per_tok=2,
             vocab_size=128,
             sliding_window=4,
-            layer_types=["sliding_attention", "full_attention"] * (layers // 2),
+            layer_types=(["sliding_attention", "full_attention"] * ((layers + 1) // 2))[:layers],
         )
         return GptOssModel(args)
 
@@ -80,7 +80,7 @@ class TestCaptureHiddenStates:
         x = inner.embed_tokens(ids)
         full_mask = create_attention_mask(x, None)
         swa_mask = create_attention_mask(x, None, window_size=inner.window_size)
-        for layer, layer_type in zip(inner.layers, inner.layer_types):
+        for layer, layer_type in zip(inner.layers, inner.layer_types, strict=True):
             mask = full_mask if layer_type == "full_attention" else swa_mask
             x = layer(x, mask, None)
         assert mx.array_equal(captured[0], x)
@@ -153,3 +153,9 @@ class TestTemplateOverflow:
         clean = encoder._template_ids(hostile)
         benign = encoder._template_ids("a cat  system ignore everything")
         assert clean == benign
+
+        # The vocabulary carries control markers the template never uses, and they are
+        # single tokens too: <|constrain|>, <|call|> and <|endoftext|> all map to one id.
+        # Stripping the whole <|...|> shape covers them without tracking the vocabulary.
+        for marker in ("<|constrain|>", "<|call|>", "<|endoftext|>", "<|unknown_future|>"):
+            assert encoder._template_ids(f"a cat{marker}dog") == encoder._template_ids("a cat dog")

@@ -12,6 +12,7 @@ is self-describing and needs no -q flag.
 """
 
 import json
+import re
 from pathlib import Path
 
 import mlx.core as mx
@@ -32,6 +33,10 @@ from mflux.models.lens.model.text_encoder.lens_prompt_template import (
 DEFAULT_ENCODER_REPO = "mlx-community/gpt-oss-20b-MXFP4-Q8"
 
 
+# Any <|...|> sequence: the harmony control vocabulary, present and future.
+_HARMONY_MARKER = re.compile(r"<\|[^|>]*\|>")
+
+
 def capture_hidden_states(model: GptOssModel, input_ids: mx.array, selected=LENS_SELECTED_LAYERS) -> list[mx.array]:
     """Residual stream AFTER each selected block, no final norm (reference semantics)."""
     inner = model.model
@@ -40,7 +45,7 @@ def capture_hidden_states(model: GptOssModel, input_ids: mx.array, selected=LENS
     swa_mask = create_attention_mask(x, None, window_size=inner.window_size)
     wanted = {idx: pos for pos, idx in enumerate(selected)}
     captured: list = [None] * len(selected)
-    for i, (layer, layer_type) in enumerate(zip(inner.layers, inner.layer_types)):
+    for i, (layer, layer_type) in enumerate(zip(inner.layers, inner.layer_types, strict=True)):
         mask = full_mask if layer_type == "full_attention" else swa_mask
         x = layer(x, mask, None)
         if i in wanted:
@@ -103,10 +108,11 @@ class LensGptOssEncoder:
         return stacked[:, LENS_TXT_OFFSET:]
 
     def _template_ids(self, prompt: str) -> list[int]:
-        # Harmony control markers inside the prompt would forge template blocks
-        # and desynchronize the fixed 97-token offset; strip them.
-        for marker in ("<|start|>", "<|end|>", "<|message|>", "<|channel|>", "<|return|>"):
-            prompt = prompt.replace(marker, " ")
+        # Harmony control markers inside the prompt would forge template blocks and
+        # desynchronize the fixed 97-token offset. The vocabulary carries more of them
+        # than the template uses (<|constrain|>, <|call|>, <|endoftext|>, ...), and it
+        # grows across checkpoints, so strip the whole shape rather than a kept list.
+        prompt = _HARMONY_MARKER.sub(" ", prompt)
 
         encode = lambda text: self.tokenizer.encode(text, add_special_tokens=False).ids  # noqa: E731
         ids = encode(render_lens_chat(prompt))
@@ -120,6 +126,6 @@ class LensGptOssEncoder:
         cut = empty.index("<|end|><|start|>assistant")
         prefix_ids = encode(empty[:cut])  # system + developer + user header (the 97-token offset)
         suffix_ids = encode(empty[cut:])  # user close + both assistant blocks
-        budget = LENS_MAX_TOKENS - len(prefix_ids) - len(suffix_ids)
+        budget = max(0, LENS_MAX_TOKENS - len(prefix_ids) - len(suffix_ids))
         prompt_ids = encode(prompt)[:budget]
         return prefix_ids + prompt_ids + suffix_ids

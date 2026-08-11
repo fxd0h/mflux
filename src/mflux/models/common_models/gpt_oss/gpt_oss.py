@@ -204,7 +204,7 @@ class GptOssMoeModel(nn.Module):
         full_mask = create_attention_mask(x, cache[self.ga_idx])
         swa_mask = create_attention_mask(x, cache[self.swa_idx], window_size=self.window_size)
 
-        for layer, c, layer_type in zip(self.layers, cache, self.layer_types):
+        for layer, c, layer_type in zip(self.layers, cache, self.layer_types, strict=True):
             mask = full_mask if layer_type == "full_attention" else swa_mask
             x = layer(x, mask, c)
         x = self.norm(x)
