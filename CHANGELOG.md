@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ⚠️ Behavior Changes
+
+- **Abbreviated long options are rejected**: every mflux CLI now requires flags to be written in full, so `--prom` no longer stands in for `--prompt`. Option provision is detected by scanning `argv`, which cannot see abbreviations, and an abbreviation that is unambiguous today starts resolving elsewhere the moment a new flag is added. Anything scripted with a shortened flag needs the full spelling. (#499)
+
+### ✨ Improvements
+
+- **Silently dropped CLI options now warn**: a command that accepts an option it cannot honour says so at parse time instead of ignoring it, for example `--guidance` on a guidance-distilled model. Adds `mflux-capabilities`, a machine-readable dump of every image-generating command with its options, defaults, types and the status of each option (honored, ignored, conditional or rejected), in JSON, YAML or Markdown. (#499)
+
 ### 🐛 Bug Fixes
 
 - **Ideogram 4 quantization**: `mflux-save -q` now actually quantizes Ideogram 4. Every weight-bearing linear in the model is an `Fp8Linear`, which defined no `to_quantized` and whose components were marked `skip_quantization`, so `-q 4` wrote an FP8 checkpoint stamped `quantization_level: 4` and only the VAE was touched. Adds `Fp8Linear.to_quantized`, drops the skip flags, derives bits and group size from the stored shapes when rebuilding a saved checkpoint instead of assuming q8/group-64, and rebuilds quantized embeddings as embeddings rather than linears. `-q 8` is 26 GB and `-q 4` is 14 GB, both visually indistinguishable from FP8. (#559)

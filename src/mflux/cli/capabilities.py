@@ -30,7 +30,7 @@ SCHEMA_VERSION = 1
 
 # Console-script prefixes that produce images and belong in the dump. Save/train/depth
 # tooling can join in a later schema revision.
-COMMAND_PREFIXES = ("mflux-generate",)
+COMMAND_PREFIXES = ("mflux-generate", "mflux-concept")
 
 
 def discover_commands() -> list[tuple[str, str]]:
@@ -178,19 +178,9 @@ def describe_command(command: str, module_path: str) -> dict[str, Any]:
 def build_capabilities() -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
-        "mflux_version": importlib.metadata.version("mflux-cv")
-        if _dist_exists("mflux-cv")
-        else importlib.metadata.version("mflux"),
+        "mflux_version": importlib.metadata.version("mflux"),
         "commands": [describe_command(command, module) for command, module in discover_commands()],
     }
-
-
-def _dist_exists(name: str) -> bool:
-    try:
-        importlib.metadata.version(name)
-        return True
-    except importlib.metadata.PackageNotFoundError:
-        return False
 
 
 def _to_markdown(capabilities: dict[str, Any]) -> str:
@@ -237,12 +227,9 @@ def main() -> None:
         # redirecting consumer then parses as garbage.
         sys.stdout.write(json.dumps(capabilities, indent=2) + "\n")
     elif args.format == "yaml":
-        try:
-            import yaml
-        except ImportError:
-            parser.error("--format yaml needs PyYAML installed; JSON needs nothing.")
-        else:
-            yaml.safe_dump(capabilities, sys.stdout, sort_keys=False)
+        import yaml
+
+        yaml.safe_dump(capabilities, sys.stdout, sort_keys=False)
     else:
         sys.stdout.write(_to_markdown(capabilities))
 
