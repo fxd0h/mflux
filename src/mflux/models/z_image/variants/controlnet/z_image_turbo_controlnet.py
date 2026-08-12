@@ -103,7 +103,9 @@ class ZImageTurboControlnet(nn.Module):
                         sigmas=config.scheduler.sigmas,
                         cap_feats=text_encodings,
                         control_context=control_latent,
-                        conditioning_scale=(1.0 if config.controlnet_strength is None else float(config.controlnet_strength))
+                        conditioning_scale=(
+                            1.0 if config.controlnet_strength is None else float(config.controlnet_strength)
+                        )
                         * float(control_scale),
                     )
                     for k, v in samples.items():

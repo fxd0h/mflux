@@ -2,7 +2,7 @@ import mlx.core as mx
 import numpy as np
 import pytest
 
-from mflux.models.hed.hed import HED, _BLOCKS, _HEDNet
+from mflux.models.hed.hed import _BLOCKS, HED, _HEDNet
 
 
 def _fake_state():
