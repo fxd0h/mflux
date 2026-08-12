@@ -200,6 +200,11 @@ class ModelConfig:
 
     @staticmethod
     @lru_cache
+    def z_image_turbo_controlnet_union_2_1() -> "ModelConfig":
+        return AVAILABLE_MODELS["z-image-turbo-controlnet-union-2.1"]
+
+    @staticmethod
+    @lru_cache
     def seedvr2_3b() -> "ModelConfig":
         return AVAILABLE_MODELS["seedvr2-3b"]
 
@@ -623,6 +628,23 @@ AVAILABLE_MODELS = {
         num_train_steps=1000,
         max_sequence_length=512,
         supports_guidance=True,
+        requires_sigma_shift=True,
+    ),
+    "z-image-turbo-controlnet-union-2.1": ModelConfig(
+        priority=15,
+        aliases=[
+            "z-image-turbo-controlnet-union-2.1",
+            "z-image-controlnet-union-2.1",
+            "z-image-controlnet",
+            "z-image-turbo-controlnet",
+        ],
+        model_name="Tongyi-MAI/Z-Image-Turbo",
+        base_model=None,
+        controlnet_model="alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1",
+        custom_transformer_model=None,
+        num_train_steps=1000,
+        max_sequence_length=512,
+        supports_guidance=False,
         requires_sigma_shift=True,
     ),
     "z-image-turbo": ModelConfig(
