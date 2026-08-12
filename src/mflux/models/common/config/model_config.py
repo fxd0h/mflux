@@ -1,5 +1,4 @@
 from functools import lru_cache
-from typing import Literal
 
 import mlx.core as mx
 
@@ -222,7 +221,10 @@ class ModelConfig:
     @staticmethod
     def from_name(
         model_name: str | None,
-        base_model: Literal["dev", "schnell", "krea-dev"] | None = None,
+        # Any root alias is accepted here, not just the three Flux ones this used to name.
+        # The resolver validates against every root config and raises InvalidBaseModel
+        # with the full list, so the annotation stays wide and the check stays in one place.
+        base_model: str | None = None,
     ) -> "ModelConfig":
         return ConfigResolution.resolve(model_name=model_name, base_model=base_model)
 

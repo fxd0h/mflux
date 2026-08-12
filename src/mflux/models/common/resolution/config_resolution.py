@@ -33,6 +33,11 @@ class ConfigResolution:
         if model_name is None and base_model is not None:
             model_name = base_model
 
+        # Naming neither leaves nothing to resolve. Without this the substring rule
+        # lowercases None and the caller gets an AttributeError from two frames deep.
+        if model_name is None:
+            raise ModelConfigError("No model requested: pass a model_name, a base_model, or both.")
+
         base_models = sorted(
             [m for m in AVAILABLE_MODELS.values() if m.base_model is None],
             key=lambda x: x.priority,
