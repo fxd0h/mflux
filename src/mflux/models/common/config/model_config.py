@@ -624,6 +624,8 @@ AVAILABLE_MODELS = {
         num_train_steps=1000,
         max_sequence_length=512,
         supports_guidance=False,  # 4-step distillation, CFG internalized
+        requires_sigma_shift=True,
+    ),
     "z-image-turbo-controlnet-union-2.1": ModelConfig(
         priority=15,
         aliases=[
