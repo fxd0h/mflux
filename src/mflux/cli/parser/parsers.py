@@ -36,6 +36,14 @@ def int_or_special_value(value) -> int | scale_factor.ScaleFactor:
         )
 
 
+def lora_init_kwargs_from_args(args: argparse.Namespace) -> dict[str, t.Any]:
+    return {
+        "lora_paths": args.lora_paths,
+        "lora_scales": args.lora_scales,
+        "bake_lora": args.bake_lora,
+    }
+
+
 def positive_float(value: str) -> float:
     try:
         parsed = float(value)
@@ -97,6 +105,12 @@ class CommandLineParser(argparse.ArgumentParser):
         lora_group.add_argument("--lora", dest="lora", action="append", nargs="+", default=None, metavar=("PATH", "SCALE"), help="Add a LoRA as an atomic PATH with optional SCALE (default 1.0). Repeatable: --lora A.safetensors 0.7 --lora B.safetensors. PATH accepts local files, HuggingFace repos (org/model), or collection format (repo:filename.safetensors). Preferred over --lora-paths/--lora-scales.")
         self.add_argument("--lora-paths", type=str, nargs="*", default=None, help="[DEPRECATED: use --lora] LoRA paths: local files, HuggingFace repos (org/model), or collection format (repo:filename.safetensors)")
         self.add_argument("--lora-scales", type=float, nargs="*", default=None, help="[DEPRECATED: use --lora] Scaling factor to adjust the impact of LoRA weights on the model. A value of 1.0 applies the LoRA weights as they are.")
+        lora_group.add_argument(
+            "--bake-lora",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help="Merge LoRA/LoKr deltas into base weights after load (default: on). Use --no-bake-lora to keep runtime adapters.",
+        )
 
     def _add_image_generator_common_arguments(self, supports_dimension_scale_factor=False) -> None:
         self.supports_image_generation = True
@@ -170,6 +184,10 @@ class CommandLineParser(argparse.ArgumentParser):
     def add_redux_arguments(self) -> None:
         self.add_argument("--redux-image-paths", type=Path, nargs="*", required=True, help="Local path to the source image")
         self.add_argument("--redux-image-strengths", type=float, nargs="*", default=None, help="Strength values (between 0.0 and 1.0) for each reference image. Default is 1.0 for all images.")
+
+    def add_pid_decode_arguments(self) -> None:
+        self.add_argument("--pid-decode", action="store_true", help="Decode with NVIDIA PiD's pixel-diffusion super-resolving decoder instead of the standard VAE. First run downloads two separate Hugging Face checkpoints (~8GB total); google/gemma-2-2b-it is gated and requires accepting its license + `hf auth login`.")
+        self.add_argument("--pid-degrade-sigma", type=float, default=0.0, help="With --pid-decode, deliberately noise the latent to this flow-matching sigma before decoding (0.0-0.8). PiD's LQ gate was distilled on latents noised at sigma~U[0.0, 0.8]; a fully clean latent (the default, sigma=0.0) is the input it saw least during training, which can show up as over-textured detail invented on smooth areas like skin. Try 0.2 if you see that. Ignored without --pid-decode.")
 
     def add_output_arguments(self) -> None:
         self.add_argument("--metadata", action="store_true", help="Export image metadata as a JSON file.")
@@ -369,6 +387,18 @@ class CommandLineParser(argparse.ArgumentParser):
             if self.supports_image_outpaint:
                 if namespace.image_outpaint_padding is None:
                     namespace.image_outpaint_padding = prior_gen_metadata.get("image_outpaint_padding", None)
+
+            if hasattr(namespace, "pid_decode") and not self._option_was_provided("--pid-decode"):
+                namespace.pid_decode = prior_gen_metadata.get("pid_decode", False)
+
+
+            if hasattr(namespace, "pid_degrade_sigma") and not self._option_was_provided("--pid-degrade-sigma"):
+                # Non-PiD sidecars omit the key entirely, but a hand-edited one can carry an
+                # explicit null, which `.get(..., 0.0)` returns as-is. Normalize it, or
+                # `--config-from-metadata <such a sidecar> --pid-decode` hands None to the
+                # decoder's float-only sigma range check.
+                metadata_sigma = prior_gen_metadata.get("pid_degrade_sigma")
+                namespace.pid_degrade_sigma = 0.0 if metadata_sigma is None else metadata_sigma
 
         # Only require model if we're not in training mode and require_model_arg is True
         if hasattr(namespace, "model") and namespace.model is None and not has_training_args and self.require_model_arg:
