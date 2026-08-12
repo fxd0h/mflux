@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import random
 import sys
 import time
@@ -10,6 +11,13 @@ from mflux.cli.defaults import defaults as ui_defaults
 from mflux.models.common.resolution.lora_resolution import LoraResolution
 from mflux.models.flux.variants.in_context.utils.in_context_loras import LORA_NAME_MAP
 from mflux.utils import box_values, scale_factor
+
+
+def finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError(f"expected a finite number, got {value!r}")
+    return parsed
 
 
 class ModelSpecAction(argparse.Action):
@@ -191,6 +199,7 @@ class CommandLineParser(argparse.ArgumentParser):
 
     def add_output_arguments(self) -> None:
         self.add_argument("--metadata", action="store_true", help="Export image metadata as a JSON file.")
+        self.add_argument("--no-metadata", action="store_true", help="Do not embed generation metadata (EXIF UserComment and friends) in the output image. Independent of --metadata, which additionally writes a JSON sidecar.")
         self.add_argument("--output", type=str, default="image.png", help="The filename for the output image. Default is \"image.png\".")
         self.add_argument('--stepwise-image-output-dir', type=str, default=None, help='[EXPERIMENTAL] Output dir to write step-wise images and their final composite image to. This feature may change in future versions.')
 
@@ -204,6 +213,25 @@ class CommandLineParser(argparse.ArgumentParser):
         self.add_argument("--controlnet-strength", type=float, default=ui_defaults.CONTROLNET_STRENGTH, help=f"Controls how strongly the control image influences the output image. A value of 0.0 means no influence. (Default is {ui_defaults.CONTROLNET_STRENGTH})")
         if mode == 'canny':
             self.add_argument("--controlnet-save-canny", action="store_true", help="If set, save the Canny edge detection reference input image.")
+
+    def add_union_controlnet_arguments(self, require_controls: bool = True) -> None:
+        """
+        Union-style ControlNet inputs (e.g. pose/depth/canny/hed/mlsd).\n
+        Uses a repeatable `--control` argument with format: `type:path[:strength]`.
+        """
+        self.supports_controlnet = True
+        self.add_argument(
+            "--control",
+            action="append",
+            required=require_controls,
+            help="Repeatable control spec: type:path[:strength] (e.g. pose:pose.png:0.8).",
+        )
+        self.add_argument(
+            "--controlnet-strength",
+            type=finite_float,
+            default=ui_defaults.CONTROLNET_STRENGTH,
+            help=f"Global multiplier applied to all controls. (Default is {ui_defaults.CONTROLNET_STRENGTH})",
+        )
 
     def add_concept_attention_arguments(self) -> None:
         concept_group = self.add_argument_group("Concept Attention configuration")
@@ -303,6 +331,11 @@ class CommandLineParser(argparse.ArgumentParser):
 
     def parse_args(self) -> argparse.Namespace:  # type: ignore
         namespace = super().parse_args()
+
+        if getattr(namespace, "no_metadata", False):
+            from mflux.utils.image_util import ImageUtil
+
+            ImageUtil.embed_metadata_enabled = False
 
         # Fold the atomic --lora / --image flags into the legacy lora_paths/lora_scales
         # and image_path/image_strength fields so all downstream logic (metadata merge,
