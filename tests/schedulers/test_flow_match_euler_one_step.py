@@ -22,16 +22,22 @@ def test_one_step_schedule_is_full_denoise():
     assert scheduler.timesteps.tolist() == [1000.0]
 
 
+# The full schedules the fix must leave alone, pinned rather than described: a test named
+# "unchanged" that only checks the endpoints would pass while the interior moved.
+EXPECTED_SCHEDULES = {
+    2: ([1.0, 0.02, 0.0], [1000.0, 20.0]),
+    4: ([1.0, 0.847524, 0.584184, 0.02, 0.0], [1000.0, 847.5239, 584.1836, 20.0]),
+}
+
+
 @pytest.mark.fast
 @pytest.mark.parametrize("num_steps", [2, 4])
 def test_multi_step_schedules_are_unchanged(num_steps):
+    expected_sigmas, expected_timesteps = EXPECTED_SCHEDULES[num_steps]
     scheduler = _scheduler(num_steps)
-    sigmas = scheduler.sigmas.tolist()
-    assert len(sigmas) == num_steps + 1
-    assert sigmas[0] == pytest.approx(1.0)
-    assert sigmas[-2] == pytest.approx(0.02)  # shift_terminal
-    assert sigmas[-1] == 0.0
-    assert sigmas == sorted(sigmas, reverse=True)
+
+    assert scheduler.sigmas.tolist() == pytest.approx(expected_sigmas, abs=1e-5)
+    assert scheduler.timesteps.tolist() == pytest.approx(expected_timesteps, abs=1e-3)
 
 
 @pytest.mark.fast
