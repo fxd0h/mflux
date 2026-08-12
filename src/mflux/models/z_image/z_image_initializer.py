@@ -10,10 +10,10 @@ from mflux.models.common.weights.loading.weight_loader import WeightLoader
 from mflux.models.z_image.model.z_image_text_encoder.text_encoder import TextEncoder
 from mflux.models.z_image.model.z_image_transformer.transformer import ZImageTransformer
 from mflux.models.z_image.model.z_image_vae.vae import VAE
-from mflux.models.z_image.weights.z_image_lora_mapping import ZImageLoRAMapping
-from mflux.models.z_image.weights.z_image_weight_definition import ZImageWeightDefinition
 from mflux.models.z_image.variants.controlnet.transformer_controlnet import ZImageControlNet, ZImageControlNetConfig
 from mflux.models.z_image.weights.z_image_controlnet_weight_definition import ZImageControlnetWeightDefinition
+from mflux.models.z_image.weights.z_image_lora_mapping import ZImageLoRAMapping
+from mflux.models.z_image.weights.z_image_weight_definition import ZImageWeightDefinition
 
 
 class ZImageInitializer:

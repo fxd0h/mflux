@@ -9,11 +9,10 @@ every forward pass is MLX, matching how the rest of mflux runs.
 
 from __future__ import annotations
 
-import numpy as np
-import PIL.Image
-
 import mlx.core as mx
 import mlx.nn as nn
+import numpy as np
+import PIL.Image
 
 # block name -> number of 3x3 conv layers before the 1x1 side-output projection
 _BLOCKS = [("block1", 2), ("block2", 2), ("block3", 3), ("block4", 3), ("block5", 3)]
@@ -28,9 +27,7 @@ class _HEDNet(nn.Module):
         self.norm = state["norm"].transpose(0, 2, 3, 1)
         self.blocks = []
         for name, n_conv in _BLOCKS:
-            convs = []
-            for c in range(n_conv):
-                convs.append(_HEDNet._conv(state, f"{name}.convs.{c}", kernel=3, padding=1))
+            convs = [_HEDNet._conv(state, f"{name}.convs.{c}", kernel=3, padding=1) for c in range(n_conv)]
             projection = _HEDNet._conv(state, f"{name}.projection", kernel=1, padding=0)
             self.blocks.append((convs, projection))
 
@@ -60,7 +57,6 @@ class _HEDNet(nn.Module):
 class HED:
     def __init__(self):
         import torch  # weights only; no torch forward pass runs
-
         from huggingface_hub import hf_hub_download
 
         raw = torch.load(hf_hub_download(repo_id=_HF_REPO, filename=_HF_FILE), map_location="cpu", weights_only=True)

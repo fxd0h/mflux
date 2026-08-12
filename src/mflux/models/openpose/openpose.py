@@ -10,11 +10,10 @@ body_pose_model weights are downloaded at runtime from lllyasviel/Annotators, th
 from __future__ import annotations
 
 import cv2
-import numpy as np
-import PIL.Image
-
 import mlx.core as mx
 import mlx.nn as nn
+import numpy as np
+import PIL.Image
 
 _HF_REPO = "lllyasviel/Annotators"
 _HF_FILE = "body_pose_model.pth"
@@ -72,7 +71,6 @@ class _OpenPoseBodyNet(nn.Module):
 class OpenPoseBody:
     def __init__(self):
         import torch  # weights only; the forward pass is MLX
-
         from huggingface_hub import hf_hub_download
 
         raw = torch.load(hf_hub_download(repo_id=_HF_REPO, filename=_HF_FILE), map_location="cpu", weights_only=True)
