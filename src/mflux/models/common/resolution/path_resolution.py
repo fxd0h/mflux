@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from pathlib import Path
@@ -179,5 +180,25 @@ class PathResolution:
                         break
             if not has_safetensors:
                 return False
+            # Indexed checkpoints are only complete when every referenced
+            # shard exists. One cached shard must not make a partial snapshot
+            # look complete and suppress Hugging Face's repair download.
+            for index_path in subdir_path.glob("*.safetensors.index.json"):
+                try:
+                    with index_path.open(encoding="utf-8") as index_file:
+                        index = json.load(index_file)
+                    weight_map = index.get("weight_map")
+                    if not isinstance(weight_map, dict) or not weight_map:
+                        return False
+                    referenced_shards = set(weight_map.values())
+                    if not all(
+                        isinstance(filename, str)
+                        and Path(filename).name == filename
+                        and (subdir_path / filename).is_file()
+                        for filename in referenced_shards
+                    ):
+                        return False
+                except (OSError, TypeError, ValueError, json.JSONDecodeError):  # noqa: PERF203
+                    return False
 
         return True
