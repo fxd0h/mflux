@@ -26,7 +26,15 @@ class WeightApplier:
             parameters = inspect.signature(predicate).parameters
         except (TypeError, ValueError):
             return predicate
-        if len(parameters) < 3:
+        # Count only what can receive `bits` positionally: a keyword-only third parameter
+        # would raise TypeError on the call below, and *args reports one parameter while
+        # accepting three.
+        positional = [
+            p
+            for p in parameters.values()
+            if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        ]
+        if len(positional) < 3:
             return predicate
         return lambda path, module: predicate(path, module, bits)
 
@@ -73,6 +81,10 @@ class WeightApplier:
             group_size = input_dims / scales_shape[-1]
             if bits in _INFERABLE_BITS and group_size in _INFERABLE_GROUP_SIZES:
                 return {"bits": int(bits), "group_size": int(group_size)}
+            # Falling back structures the layer at the REQUESTED precision while the file
+            # holds another, so update() may reject it later. Say so here, where the shapes
+            # that did not add up are still in hand.
+            print(f"⚠️  Could not read the stored quantization of {path} (bits={bits}, group_size={group_size})")
             return base
 
         return predicate

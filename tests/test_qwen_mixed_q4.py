@@ -1,7 +1,10 @@
+from types import SimpleNamespace
+
 import mlx.core as mx
 import mlx.nn as nn
 import pytest
 
+from mflux.models.common.weights.loading.loaded_weights import LoadedWeights, MetaData
 from mflux.models.common.weights.loading.weight_applier import WeightApplier
 from mflux.models.qwen.weights.qwen_weight_definition import QwenWeightDefinition
 
@@ -204,3 +207,53 @@ class TestStoredLayerGroupSizes:
         stored_predicate = WeightApplier._stored_layer_predicate(component_weights, None)
         nn.quantize(fresh, bits=4, class_predicate=stored_predicate)
         assert fresh.proj_out.bits == 4
+
+
+@pytest.mark.fast
+class TestQuantizeWiring:
+    """The helpers are covered above; this is the path a load actually takes."""
+
+    @staticmethod
+    def _definition(predicate=None):
+        return SimpleNamespace(quantization_predicate=predicate or (lambda p, m: hasattr(m, "to_quantized")))
+
+    def test_quantize_rebuilds_a_mixed_save_at_its_stored_precision(self):
+        saved = SmallModel()
+        saved_predicate = WeightApplier._predicate_with_bits(QwenWeightDefinition.quantization_predicate, 4)
+        nn.quantize(saved, bits=4, class_predicate=saved_predicate)
+        weights = LoadedWeights(components={"transformer": saved.parameters()}, meta_data=MetaData())
+
+        fresh = SmallModel()
+        WeightApplier._quantize(
+            models={"transformer": fresh},
+            bits=4,
+            components={},
+            weight_definition=self._definition(QwenWeightDefinition.quantization_predicate),
+            weights=weights,
+        )
+
+        block = fresh.transformer_blocks[0]
+        assert (block.img_mod_linear.bits, block.attn_proj.bits) == (8, 4)
+
+    def test_quantize_honours_skip_quantization(self):
+        fresh = SmallModel()
+        component = SimpleNamespace(skip_quantization=True, weight_subkey=None)
+        WeightApplier._quantize(
+            models={"transformer": fresh},
+            bits=4,
+            components={"transformer": component},
+            weight_definition=self._definition(),
+            weights=None,
+        )
+
+        assert not isinstance(fresh.proj_out, nn.QuantizedLinear)
+
+
+@pytest.mark.fast
+def test_a_keyword_only_third_parameter_is_not_treated_as_bits():
+    # A predicate whose third parameter cannot take a positional argument must be left
+    # alone: calling it as predicate(path, module, bits) would raise TypeError.
+    def predicate(path, module, *, debug=False):
+        return True
+
+    assert WeightApplier._predicate_with_bits(predicate, 4) is predicate
