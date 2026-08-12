@@ -165,6 +165,7 @@ class TrainingTrainer:
         max_grad_norm = training_spec.optimizer.max_grad_norm
         accum_steps = max(1, training_spec.optimizer.gradient_accumulation_steps)
         accumulated_grads = None
+        accumulated_count = 0
         nonfinite_skips = 0
         for batch in batches:
             loss, grads = train_step_function(batch)
@@ -174,7 +175,7 @@ class TrainingTrainer:
                 # Drop any partial accumulation window: a skipped micro-batch (especially on a
                 # window boundary) must not carry its accumulated grads into the next window,
                 # which would apply an oversized optimizer step.
-                accumulated_grads = None
+                accumulated_grads, accumulated_count = None, 0
                 if training_spec.low_ram:
                     mx.clear_cache()
                 continue
@@ -182,16 +183,15 @@ class TrainingTrainer:
 
             # Gradient accumulation: average grads across accum_steps micro-batches and only step
             # the optimizer on the window boundary, for an effective batch of batch_size *
-            # accum_steps. num_iterations counts micro-batches, so the boundary is every
-            # accum_steps of them; bookkeeping below still runs each iteration on valid weights.
-            at_step_boundary = training_state.iterator.num_iterations % accum_steps == 0
+            # accum_steps.
+            at_step_boundary = True
             if accum_steps > 1:
-                grads = tree_map(lambda g: g / accum_steps, grads)
-                if accumulated_grads is not None:
-                    grads = tree_map(lambda a, g: a + g, accumulated_grads, grads)
+                grads, accumulated_count, at_step_boundary = TrainingTrainer._fold_into_window(
+                    grads, accumulated_grads, accum_steps, accumulated_count
+                )
                 accumulated_grads = None if at_step_boundary else grads
 
-            if accum_steps == 1 or at_step_boundary:
+            if at_step_boundary:
                 if max_grad_norm is not None:
                     grads, _ = clip_grad_norm(grads, max_grad_norm)
                 training_state.optimizer.optimizer.update(model=adapter.model(), gradients=grads)
@@ -292,6 +292,23 @@ class TrainingTrainer:
             )
             del image
 
+    @staticmethod
+    def _fold_into_window(grads, accumulated, accum_steps: int, count: int):
+        """Fold one valid micro-batch into the accumulation window.
+
+        The window closes after accum_steps VALID micro-batches rather than after
+        accum_steps iterations. Counting iterations closes it early whenever a
+        non-finite step reset the window mid-way, and the optimizer then steps on a
+        partial sum that was still divided by the full accum_steps: a smaller update
+        than either the accumulated or the unaccumulated setting asks for.
+        """
+        scaled = tree_map(lambda g: g / accum_steps, grads)
+        if accumulated is not None:
+            scaled = tree_map(lambda a, g: a + g, accumulated, scaled)
+        count += 1
+        if count >= accum_steps:
+            return scaled, 0, True
+        return scaled, count, False
 
     @staticmethod
     def _step_is_finite(loss) -> bool:
