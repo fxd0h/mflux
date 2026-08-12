@@ -93,7 +93,8 @@ class LoRALoader:
         total_keys = len(weights)
         unmatched_keys = set(weights.keys()) - matched_keys
 
-        print(f"   ✅ Applied to {applied_count} layers ({len(matched_keys)}/{total_keys} keys matched)")
+        if applied_count:
+            print(f"   ✅ Applied to {applied_count} layers ({len(matched_keys)}/{total_keys} keys matched)")
 
         if unmatched_keys:
             print(f"   ⚠️  {len(unmatched_keys)} unmatched keys in LoRA file:")

@@ -38,7 +38,6 @@ def test_every_weight_pattern_also_matches_its_bare_form(mapping_cls):
                 f"{mapping_cls.__name__}: bare form of {pattern!r} does not match"
             )
             checked += 1
-            break  # one pattern per target keeps the test fast and still covers every module
     assert checked > 0, f"{mapping_cls.__name__} exposes no .weight patterns to check"
 
 
