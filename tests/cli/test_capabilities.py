@@ -1,3 +1,4 @@
+import argparse
 import importlib
 import json
 import sys
@@ -152,13 +153,34 @@ def test_boolean_optional_flags_publish_the_positive_form():
     caps = capabilities.build_capabilities()
     for command in caps["commands"]:
         for option in command["options"]:
-            if option["flag"].startswith("--no-"):
-                # The canonical spelling is the positive one whenever both exist, whatever the
-                # default happens to be: a caller builds invocations from these strings.
-                positive = "--" + option["flag"][len("--no-") :]
-                assert positive in (option.get("aliases") or []), (
-                    f"{command['command']} publishes {option['flag']} as canonical over {positive}"
-                )
+            spellings = [option["flag"], *(option.get("aliases") or [])]
+            negatives = [flag for flag in spellings if flag.startswith("--no-")]
+            paired = [flag for flag in negatives if "--" + flag[len("--no-") :] in spellings]
+            if not paired:
+                # A lone --no-* flag is its own option rather than the negated half of a
+                # pair, and renaming it is not this contract's business.
+                continue
+            # Both spellings drive one option, so the canonical one has to be the positive
+            # form whatever the default is: a caller builds invocations from these strings.
+            assert not option["flag"].startswith("--no-"), (
+                f"{command['command']} publishes {option['flag']} as canonical over "
+                f"{'--' + option['flag'][len('--no-') :]}"
+            )
+
+
+@pytest.mark.fast
+def test_a_boolean_optional_action_publishes_its_positive_spelling():
+    # The command sweep above only sees flags some CLI happens to declare. This pins the
+    # rule at the source, since argparse stores the negated spelling as a second option
+    # string and picking the longest one would make --no-bake-lora canonical.
+    parser = argparse.ArgumentParser()
+    action = parser.add_argument("--bake-lora", action=argparse.BooleanOptionalAction, default=True)
+
+    record = capabilities._describe_option(action, {}, {}, {})
+
+    assert record["flag"] == "--bake-lora"
+    assert record["aliases"] == ["--no-bake-lora"]
+    assert record["parser_default"] is True
 
 
 @pytest.mark.fast
