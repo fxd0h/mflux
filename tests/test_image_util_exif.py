@@ -43,6 +43,21 @@ def test_load_image_without_orientation_is_untouched(tmp_path):
 
 
 @pytest.mark.fast
+def test_orientation_one_leaves_the_pixels_where_they_are(tmp_path):
+    # The identity value has to be an identity in pixels as well. A transform applied
+    # unconditionally would hold the 4x2 size and still move the red column, which the
+    # size checks alone cannot see.
+    path = tmp_path / "upright.jpg"
+    _save_with_orientation(path, orientation=1)
+
+    loaded = ImageUtil.load_image(path)
+
+    assert loaded.size == (4, 2)
+    assert loaded.getpixel((0, 0))[0] > 128
+    assert loaded.getpixel((3, 0))[2] > 128
+
+
+@pytest.mark.fast
 def test_load_image_applies_orientation_on_in_memory_images(tmp_path):
     path = tmp_path / "rotated.jpg"
     _save_with_orientation(path, orientation=6)
