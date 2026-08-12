@@ -74,8 +74,10 @@ class HED:
         scale = min(1.0, max_resolution / max(out_width, out_height))
         work_width = max(16, round(out_width * scale))
         work_height = max(16, round(out_height * scale))
-        work = rgb if (work_width, work_height) == (out_width, out_height) else rgb.resize(
-            (work_width, work_height), PIL.Image.LANCZOS
+        work = (
+            rgb
+            if (work_width, work_height) == (out_width, out_height)
+            else rgb.resize((work_width, work_height), PIL.Image.LANCZOS)
         )
 
         x = mx.array(np.array(work, dtype=np.float32)[None])  # 1, H, W, 3 in 0-255

@@ -16,6 +16,7 @@ except ImportError:  # httpx rides in with huggingface_hub 1.x; degrade graceful
     class _ProxyError(Exception):
         pass
 
+
 from mflux.models.z_image.model.z_image_transformer.transformer import ZImageTransformer
 from mflux.models.z_image.model.z_image_transformer.transformer_block import ZImageTransformerBlock
 
@@ -91,7 +92,9 @@ class ZImageControlNetConfig:
         try:
             return ZImageControlNetConfig(
                 control_layers_places=_get_list("control_layers_places", defaults.control_layers_places),
-                control_refiner_layers_places=_get_list("control_refiner_layers_places", defaults.control_refiner_layers_places),
+                control_refiner_layers_places=_get_list(
+                    "control_refiner_layers_places", defaults.control_refiner_layers_places
+                ),
                 control_in_dim=int(cfg.get("control_in_dim", defaults.control_in_dim)),
                 add_control_noise_refiner=cfg.get("add_control_noise_refiner", "control_noise_refiner"),
                 patch_size=int(cfg.get("all_patch_size", [2])[0] if isinstance(cfg.get("all_patch_size"), list) else 2),
