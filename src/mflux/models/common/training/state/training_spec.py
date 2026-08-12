@@ -1,7 +1,7 @@
 import datetime
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -95,6 +95,10 @@ class OptimizerSpec:
     lr_schedule: str | None = None
     lr_warmup_steps: int = 0
     lr_total_steps: int | None = None
+    # Extra keyword arguments forwarded to the MLX optimizer constructor
+    # (e.g. weight_decay, betas, eps). Without this, any optimizer hyperparameter
+    # other than the learning rate silently falls back to the MLX default.
+    optimizer_params: dict = field(default_factory=dict)
 
 
 @dataclass
