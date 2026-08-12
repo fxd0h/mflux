@@ -37,10 +37,11 @@ def discover_commands() -> list[tuple[str, str]]:
     """(command, module) pairs from the installed entry points, sorted by command."""
     entry_points = importlib.metadata.entry_points()
     scripts = entry_points.select(group="console_scripts")
-    found = []
-    for entry_point in scripts:
-        if entry_point.name.startswith(COMMAND_PREFIXES):
-            found.append((entry_point.name, entry_point.value.split(":")[0]))
+    found = [
+        (entry_point.name, entry_point.value.split(":")[0])
+        for entry_point in scripts
+        if entry_point.name.startswith(COMMAND_PREFIXES)
+    ]
     return sorted(set(found))
 
 
@@ -177,7 +178,9 @@ def describe_command(command: str, module_path: str) -> dict[str, Any]:
 def build_capabilities() -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
-        "mflux_version": importlib.metadata.version("mflux-cv") if _dist_exists("mflux-cv") else importlib.metadata.version("mflux"),
+        "mflux_version": importlib.metadata.version("mflux-cv")
+        if _dist_exists("mflux-cv")
+        else importlib.metadata.version("mflux"),
         "commands": [describe_command(command, module) for command, module in discover_commands()],
     }
 
@@ -191,7 +194,10 @@ def _dist_exists(name: str) -> bool:
 
 
 def _to_markdown(capabilities: dict[str, Any]) -> str:
-    lines = [f"# mflux capabilities (schema {capabilities['schema_version']}, mflux {capabilities['mflux_version']})", ""]
+    lines = [
+        f"# mflux capabilities (schema {capabilities['schema_version']}, mflux {capabilities['mflux_version']})",
+        "",
+    ]
     for cmd in capabilities["commands"]:
         lines.append(f"## {cmd['command']}")
         if cmd.get("coverage") != "full":
@@ -213,7 +219,9 @@ def _to_markdown(capabilities: dict[str, Any]) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Dump which options each mflux CLI actually honours.")
-    parser.add_argument("--command", type=str, default=None, help="Only dump this command (e.g. mflux-generate-z-image).")
+    parser.add_argument(
+        "--command", type=str, default=None, help="Only dump this command (e.g. mflux-generate-z-image)."
+    )
     parser.add_argument("--format", type=str, default="json", choices=["json", "yaml", "markdown"])
     args = parser.parse_args()
 

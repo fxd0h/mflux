@@ -10,7 +10,6 @@ from mflux.models.flux.variants.in_context.utils.in_context_fill_util import Flu
 from mflux.models.flux.variants.in_context.utils.in_context_loras import IC_EDIT_LORA_SCALE, get_ic_edit_lora_path
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
 
-
 # Single source of truth for options this CLI accepts but cannot honour: the runtime
 # warning and the mflux-capabilities dump both read it.
 IGNORED_OPTIONS = {

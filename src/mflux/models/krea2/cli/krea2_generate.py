@@ -1,3 +1,5 @@
+import warnings
+
 from mflux.callbacks.callback_manager import CallbackManager
 from mflux.cli.parser.parsers import CommandLineParser, lora_init_kwargs_from_args
 from mflux.models.common.config import ModelConfig
@@ -15,8 +17,9 @@ DEFAULT_GUIDANCE = 1.0
 
 CONDITIONAL_OPTIONS = {
     "--negative-prompt": {
-        "condition": "guidance above 1.0",
-        "reason": "at the distilled default there is no unconditional pass, so the negative prompt has no effect.",
+        "condition": "guidance other than 1.0",
+        "reason": "the encoder builds the unconditional branch only when guidance != 1.0, so at the "
+        "distilled default of 1.0 the negative prompt is never encoded.",
     },
 }
 
@@ -56,6 +59,13 @@ def main():
     try:
         steps = args.steps if args.steps is not None else DEFAULT_STEPS
         guidance = args.guidance if args.guidance is not None else DEFAULT_GUIDANCE
+        if guidance == 1.0 and CommandLineParser._option_was_provided("--negative-prompt"):
+            # The declared condition, checked once the default has resolved: the encoder
+            # only builds the unconditional branch when guidance != 1.0.
+            warnings.warn(
+                "--negative-prompt is ignored at guidance 1.0; " + CONDITIONAL_OPTIONS["--negative-prompt"]["reason"],
+                stacklevel=2,
+            )
         width, height = DimensionResolver.resolve(
             width=args.width,
             height=args.height,

@@ -37,6 +37,7 @@ def build_parser() -> CommandLineParser:
 def main():
     parser = build_parser()
     args = parser.parse_args()
+    CommandLineParser.warn_ignored_options(IGNORED_OPTIONS)
 
     if args.guidance is None:
         args.guidance = 1.0

@@ -15,8 +15,8 @@ REJECTED_OPTIONS = {
 
 CONDITIONAL_OPTIONS = {
     "--guidance": {
-        "condition": "FLUX.2 base checkpoints",
-        "reason": "other models require guidance 1.0; any other value exits with an error.",
+        "condition": "FLUX.2 models",
+        "reason": "any other model requires guidance 1.0; other values exit with an error.",
     },
 }
 

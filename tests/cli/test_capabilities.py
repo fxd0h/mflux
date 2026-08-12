@@ -153,9 +153,11 @@ def test_boolean_optional_flags_publish_the_positive_form():
     for command in caps["commands"]:
         for option in command["options"]:
             if option["flag"].startswith("--no-"):
-                # A negated canonical flag with a truthy default describes the option backwards.
-                assert option["parser_default"] is not True, (
-                    f"{command['command']} publishes {option['flag']} as canonical with default true"
+                # The canonical spelling is the positive one whenever both exist, whatever the
+                # default happens to be: a caller builds invocations from these strings.
+                positive = "--" + option["flag"][len("--no-") :]
+                assert positive in (option.get("aliases") or []), (
+                    f"{command['command']} publishes {option['flag']} as canonical over {positive}"
                 )
 
 

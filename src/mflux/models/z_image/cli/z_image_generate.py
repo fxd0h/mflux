@@ -10,7 +10,6 @@ from mflux.utils.dimension_resolver import DimensionResolver
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
 from mflux.utils.prompt_util import PromptUtil
 
-
 # Single source of truth for CFG-dependent options: main() warns from these and the
 # mflux-capabilities dump reads them. Both flags depend on what --model resolves to,
 # so they are conditional, not statically ignored.
@@ -59,7 +58,9 @@ def main():
                 "--negative-prompt": CONDITIONAL_OPTIONS["--negative-prompt"]["reason"],
             }
         )
-    elif CommandLineParser._option_was_provided("--negative-prompt") and (args.guidance is None or args.guidance <= 1.0):
+    elif CommandLineParser._option_was_provided("--negative-prompt") and (
+        args.guidance is None or args.guidance <= 1.0
+    ):
         warnings.warn(
             f"--negative-prompt has no effect: {CONDITIONAL_OPTIONS['--negative-prompt']['reason']}"
             " Pass --guidance above 1.0 to enable it.",

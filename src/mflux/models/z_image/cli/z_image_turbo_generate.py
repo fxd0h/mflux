@@ -7,7 +7,6 @@ from mflux.utils.dimension_resolver import DimensionResolver
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
 from mflux.utils.prompt_util import PromptUtil
 
-
 # Single source of truth for options this CLI accepts but cannot honour: the runtime
 # warning and the mflux-capabilities dump both read it.
 IGNORED_OPTIONS = {

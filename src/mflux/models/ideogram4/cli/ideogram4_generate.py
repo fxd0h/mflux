@@ -1,4 +1,3 @@
-
 from mflux.callbacks.callback_manager import CallbackManager
 from mflux.cli.parser.parsers import CommandLineParser, lora_init_kwargs_from_args
 from mflux.models.common.config import ModelConfig
@@ -9,7 +8,6 @@ from mflux.models.ideogram4.weights.ideogram4_weight_definition import Ideogram4
 from mflux.utils.dimension_resolver import DimensionResolver
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
 from mflux.utils.prompt_util import PromptUtil
-
 
 # Single source of truth for options this CLI accepts but cannot honour: the runtime
 # warning and the mflux-capabilities dump both read it.

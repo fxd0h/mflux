@@ -113,9 +113,6 @@ def test_z_image_turbo_cli_warns_on_both(monkeypatch):
     assert any("--negative-prompt is ignored" in m for m in messages)
 
 
-
-
-
 # --- the conditional z-image branch ---------------------------------------------------
 
 
