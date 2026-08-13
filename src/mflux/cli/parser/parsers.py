@@ -194,7 +194,7 @@ class CommandLineParser(argparse.ArgumentParser):
         self.add_argument("--redux-image-strengths", type=float, nargs="*", default=None, help="Strength values (between 0.0 and 1.0) for each reference image. Default is 1.0 for all images.")
 
     def add_pid_decode_arguments(self) -> None:
-        self.add_argument("--pid-decode", action="store_true", help="Decode with NVIDIA PiD's pixel-diffusion super-resolving decoder instead of the standard VAE. First run downloads two separate Hugging Face checkpoints (~8GB total); google/gemma-2-2b-it is gated and requires accepting its license + `hf auth login`.")
+        self.add_argument("--pid-decode", action=argparse.BooleanOptionalAction, default=False, help="Decode with NVIDIA PiD's pixel-diffusion super-resolving decoder instead of the standard VAE. First run downloads two separate Hugging Face checkpoints (~8GB total); google/gemma-2-2b-it is gated and requires accepting its license + `hf auth login`.")
         self.add_argument("--pid-degrade-sigma", type=float, default=0.0, help="With --pid-decode, deliberately noise the latent to this flow-matching sigma before decoding (0.0-0.8). PiD's LQ gate was distilled on latents noised at sigma~U[0.0, 0.8]; a fully clean latent (the default, sigma=0.0) is the input it saw least during training, which can show up as over-textured detail invented on smooth areas like skin. Try 0.2 if you see that. Ignored without --pid-decode.")
 
     def add_output_arguments(self) -> None:
@@ -212,7 +212,7 @@ class CommandLineParser(argparse.ArgumentParser):
         self.add_argument("--controlnet-image-path", type=str, required=require_image, help="Local path of the image to use as input for controlnet.")
         self.add_argument("--controlnet-strength", type=float, default=ui_defaults.CONTROLNET_STRENGTH, help=f"Controls how strongly the control image influences the output image. A value of 0.0 means no influence. (Default is {ui_defaults.CONTROLNET_STRENGTH})")
         if mode == 'canny':
-            self.add_argument("--controlnet-save-canny", action="store_true", help="If set, save the Canny edge detection reference input image.")
+            self.add_argument("--controlnet-save-canny", action=argparse.BooleanOptionalAction, default=False, help="If set, save the Canny edge detection reference input image.")
 
     def add_union_controlnet_arguments(self, require_controls: bool = True) -> None:
         """
@@ -413,7 +413,7 @@ class CommandLineParser(argparse.ArgumentParser):
                     namespace.controlnet_image_path = prior_gen_metadata.get("controlnet_image_path", None)
                 if namespace.controlnet_strength == self.get_default("controlnet_strength") and (cnet_strength_from_metadata := prior_gen_metadata.get("controlnet_strength", None)):
                     namespace.controlnet_strength = cnet_strength_from_metadata
-                if namespace.controlnet_save_canny == self.get_default("controlnet_save_canny") and (cnet_canny_from_metadata := prior_gen_metadata.get("controlnet_save_canny", None)):
+                if not self._option_was_provided("--controlnet-save-canny", "--no-controlnet-save-canny") and (cnet_canny_from_metadata := prior_gen_metadata.get("controlnet_save_canny", None)) is not None:
                     namespace.controlnet_save_canny = cnet_canny_from_metadata
 
 
@@ -421,7 +421,7 @@ class CommandLineParser(argparse.ArgumentParser):
                 if namespace.image_outpaint_padding is None:
                     namespace.image_outpaint_padding = prior_gen_metadata.get("image_outpaint_padding", None)
 
-            if hasattr(namespace, "pid_decode") and not self._option_was_provided("--pid-decode"):
+            if hasattr(namespace, "pid_decode") and not self._option_was_provided("--pid-decode", "--no-pid-decode"):
                 namespace.pid_decode = prior_gen_metadata.get("pid_decode", False)
 
 
