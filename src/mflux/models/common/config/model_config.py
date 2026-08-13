@@ -1,5 +1,4 @@
 from functools import lru_cache
-from typing import Literal
 
 import mlx.core as mx
 
@@ -190,6 +189,11 @@ class ModelConfig:
 
     @staticmethod
     @lru_cache
+    def lens_turbo() -> "ModelConfig":
+        return AVAILABLE_MODELS["lens-turbo"]
+
+    @staticmethod
+    @lru_cache
     def z_image_turbo() -> "ModelConfig":
         return AVAILABLE_MODELS["z-image-turbo"]
 
@@ -231,8 +235,11 @@ class ModelConfig:
 
     @staticmethod
     def from_name(
-        model_name: str,
-        base_model: Literal["dev", "schnell", "krea-dev"] | None = None,
+        model_name: str | None,
+        # Any root alias is accepted here, not just the three Flux ones this used to name.
+        # The resolver validates against every root config and raises InvalidBaseModel
+        # with the full list, so the annotation stays wide and the check stays in one place.
+        base_model: str | None = None,
     ) -> "ModelConfig":
         return ConfigResolution.resolve(model_name=model_name, base_model=base_model)
 
@@ -628,6 +635,18 @@ AVAILABLE_MODELS = {
         num_train_steps=1000,
         max_sequence_length=512,
         supports_guidance=True,
+        requires_sigma_shift=True,
+    ),
+    "lens-turbo": ModelConfig(
+        priority=22,
+        aliases=["lens-turbo", "lens"],
+        model_name="Comfy-Org/Lens",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model=None,
+        num_train_steps=1000,
+        max_sequence_length=512,
+        supports_guidance=False,  # 4-step distillation, CFG internalized
         requires_sigma_shift=True,
     ),
     "z-image-turbo-controlnet-union-2.1": ModelConfig(
