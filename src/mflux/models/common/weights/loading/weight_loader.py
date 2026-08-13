@@ -49,10 +49,13 @@ class WeightLoader:
     def load(
         weight_definition: "WeightDefinitionType",
         model_path: str | None = None,
+        download_patterns: list[str] | None = None,
     ) -> LoadedWeights:
+        # download_patterns lets a caller supply variant-aware HF allow_patterns (e.g. Krea 2
+        # Turbo vs Raw need different transformer layouts); default to the definition's list.
         root_path = PathResolution.resolve(
             path=model_path,
-            patterns=weight_definition.get_download_patterns(),
+            patterns=download_patterns if download_patterns is not None else weight_definition.get_download_patterns(),
         )
 
         # 2. Load each component (with caching for shared sources)
@@ -97,6 +100,12 @@ class WeightLoader:
         component: ComponentDefinition,
         raw_weights_cache: dict[tuple, dict] | None = None,
     ) -> tuple[dict, int | None, str | None]:
+        # Some components are distributed in more than one on-disk layout (e.g. a native
+        # single-file checkpoint vs a diffusers sharded directory with different keys).
+        # Let the component pick the concrete definition based on what is present on disk.
+        if component.variant_selector is not None and root_path is not None:
+            component = component.variant_selector(root_path)
+
         # Handle direct URL downloads (e.g., Apple CDN for DepthPro)
         if component.download_url is not None:
             file_path = WeightLoader._download_from_url(component.download_url, component.name)
