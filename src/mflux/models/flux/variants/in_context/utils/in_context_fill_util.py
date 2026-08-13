@@ -1,4 +1,3 @@
-
 from mflux.utils.exif_orientation import oriented_size
 from mflux.utils.prompt_util import PromptUtil
 

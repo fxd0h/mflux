@@ -9,8 +9,6 @@ import mlx.core as mx
 from mlx import nn
 from mlx.optimizers import clip_grad_norm
 from mlx.utils import tree_map, tree_unflatten
-from PIL import Image as PILImage
-from mlx.utils import tree_unflatten
 from tqdm import tqdm
 
 from mflux.models.common.latent_creator.latent_creator import LatentCreator

@@ -51,7 +51,9 @@ class Optimizer:
                 return optim.join_schedules([optim.linear_schedule(0.0, lr, warmup), main], [warmup])
             return main
         if warmup > 0:  # warmup then constant
-            return optim.join_schedules([optim.linear_schedule(0.0, lr, warmup), optim.cosine_decay(lr, 10**12)], [warmup])
+            return optim.join_schedules(
+                [optim.linear_schedule(0.0, lr, warmup), optim.cosine_decay(lr, 10**12)], [warmup]
+            )
         return lr
 
     @staticmethod

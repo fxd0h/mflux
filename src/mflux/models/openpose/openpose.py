@@ -10,28 +10,96 @@ body_pose_model weights are downloaded at runtime from lllyasviel/Annotators, th
 from __future__ import annotations
 
 import cv2
-import numpy as np
-import PIL.Image
-
 import mlx.core as mx
 import mlx.nn as nn
+import numpy as np
+import PIL.Image
 
 _HF_REPO = "lllyasviel/Annotators"
 _HF_FILE = "body_pose_model.pth"
 
-_VGG = ["conv1_1", "conv1_2", "P", "conv2_1", "conv2_2", "P",
-        "conv3_1", "conv3_2", "conv3_3", "conv3_4", "P",
-        "conv4_1", "conv4_2", "conv4_3_CPM", "conv4_4_CPM"]
+_VGG = [
+    "conv1_1",
+    "conv1_2",
+    "P",
+    "conv2_1",
+    "conv2_2",
+    "P",
+    "conv3_1",
+    "conv3_2",
+    "conv3_3",
+    "conv3_4",
+    "P",
+    "conv4_1",
+    "conv4_2",
+    "conv4_3_CPM",
+    "conv4_4_CPM",
+]
 _S1 = ["conv5_1_CPM_L1", "conv5_2_CPM_L1", "conv5_3_CPM_L1", "conv5_4_CPM_L1", "conv5_5_CPM_L1"]
 
 # COCO-18 skeleton: limb keypoint pairs (1-indexed), the PAF channels per limb, and per-keypoint colors.
-_LIMB_SEQ = [[2, 3], [2, 6], [3, 4], [4, 5], [6, 7], [7, 8], [2, 9], [9, 10], [10, 11], [2, 12],
-             [12, 13], [13, 14], [2, 1], [1, 15], [15, 17], [1, 16], [16, 18], [3, 17], [6, 18]]
-_MAP_IDX = [[31, 32], [39, 40], [33, 34], [35, 36], [41, 42], [43, 44], [19, 20], [21, 22], [23, 24],
-            [25, 26], [27, 28], [29, 30], [47, 48], [49, 50], [53, 54], [51, 52], [55, 56], [37, 38], [45, 46]]
-_COLORS = [[255, 0, 0], [255, 85, 0], [255, 170, 0], [255, 255, 0], [170, 255, 0], [85, 255, 0], [0, 255, 0],
-           [0, 255, 85], [0, 255, 170], [0, 255, 255], [0, 170, 255], [0, 85, 255], [0, 0, 255], [85, 0, 255],
-           [170, 0, 255], [255, 0, 255], [255, 0, 170], [255, 0, 85]]
+_LIMB_SEQ = [
+    [2, 3],
+    [2, 6],
+    [3, 4],
+    [4, 5],
+    [6, 7],
+    [7, 8],
+    [2, 9],
+    [9, 10],
+    [10, 11],
+    [2, 12],
+    [12, 13],
+    [13, 14],
+    [2, 1],
+    [1, 15],
+    [15, 17],
+    [1, 16],
+    [16, 18],
+    [3, 17],
+    [6, 18],
+]
+_MAP_IDX = [
+    [31, 32],
+    [39, 40],
+    [33, 34],
+    [35, 36],
+    [41, 42],
+    [43, 44],
+    [19, 20],
+    [21, 22],
+    [23, 24],
+    [25, 26],
+    [27, 28],
+    [29, 30],
+    [47, 48],
+    [49, 50],
+    [53, 54],
+    [51, 52],
+    [55, 56],
+    [37, 38],
+    [45, 46],
+]
+_COLORS = [
+    [255, 0, 0],
+    [255, 85, 0],
+    [255, 170, 0],
+    [255, 255, 0],
+    [170, 255, 0],
+    [85, 255, 0],
+    [0, 255, 0],
+    [0, 255, 85],
+    [0, 255, 170],
+    [0, 255, 255],
+    [0, 170, 255],
+    [0, 85, 255],
+    [0, 0, 255],
+    [85, 0, 255],
+    [170, 0, 255],
+    [255, 0, 255],
+    [255, 0, 170],
+    [255, 0, 85],
+]
 
 
 class _OpenPoseBodyNet(nn.Module):
@@ -72,7 +140,6 @@ class _OpenPoseBodyNet(nn.Module):
 class OpenPoseBody:
     def __init__(self):
         import torch  # weights only; the forward pass is MLX
-
         from huggingface_hub import hf_hub_download
 
         raw = torch.load(hf_hub_download(repo_id=_HF_REPO, filename=_HF_FILE), map_location="cpu", weights_only=True)

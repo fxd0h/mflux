@@ -198,3 +198,21 @@ def test_download_patterns_cover_both_variants():
     # The Raw repo ships only the diffusers transformer/ dir; a fresh load must fetch it.
     assert any(p.startswith("transformer/") for p in raw)
     assert "turbo.safetensors" not in raw
+
+
+def test_zero_match_error_names_the_key_endings(tmp_path):
+    # The one case where the user has no idea what went wrong (a naming format the
+    # mapping does not understand) must say what it saw, not just "nothing applied".
+    lora_file = tmp_path / "weird.safetensors"
+    mx.save_safetensors(
+        str(lora_file),
+        {
+            "diffusion_model.blocks.0.prenorm.scale.diff": mx.zeros((8,)),
+            "diffusion_model.blocks.0.attn.wk.strange_name": mx.zeros((4, 4)),
+        },
+    )
+    with pytest.raises(ValueError, match="Key endings seen in the file") as excinfo:
+        LoRALoader._apply_single_lora(
+            _tiny_transformer(), str(lora_file), 1.0, Krea2LoRAMapping.get_mapping(), role=None
+        )
+    assert "scale.diff" in str(excinfo.value)
