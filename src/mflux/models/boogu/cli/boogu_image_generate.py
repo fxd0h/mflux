@@ -3,7 +3,6 @@ from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.boogu.variants import BooguImage
 from mflux.models.common.config import ModelConfig
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
-from mflux.utils.image_util import ImageUtil
 from mflux.utils.prompt_util import PromptUtil
 
 # Single source of truth for options this CLI accepts but cannot honour: the runtime
@@ -55,11 +54,7 @@ def main():
                 height=args.height,
                 num_inference_steps=args.steps,
             )
-            ImageUtil.save_image(
-                image=image,
-                path=args.output.format(seed=seed),
-                export_json_metadata=args.metadata,
-            )
+            image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata)
     except (StopImageGenerationException, PromptFileReadError) as exc:
         print(exc)
     finally:

@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Silently dropped CLI options now warn**: a command that accepts an option it cannot honour says so at parse time instead of ignoring it, for example `--guidance` on a guidance-distilled model. Adds `mflux-capabilities`, a machine-readable dump of every image-generating command with its options, defaults, types and the status of each option (honored, ignored, conditional or rejected), in JSON, YAML or Markdown. (#499)
 
+### ✨ Improvements
+
+- **`--vae-tiling` and `--vae-tile-size` flags**: Restore user-facing control over tiled VAE decoding, decoupled from `--low-ram` (previously the only way to enable it). `--vae-tiling` enables tiled decode with the default 512px tiles; `--vae-tile-size 256` shrinks the tiles to further reduce peak decode memory and implies `--vae-tiling`. Both compose with `--low-ram`, whose implicit tiling defaults they override. The original `--vae-tiling`/`--vae-tiling-split` flags were removed in the Z-Image refactor (#284); this restores the capability on top of the generalized `VAETiler`. (#311, #407)
 ### 🐛 Bug Fixes
 
 - **Ideogram 4 quantization**: `mflux-save -q` now actually quantizes Ideogram 4. Every weight-bearing linear in the model is an `Fp8Linear`, which defined no `to_quantized` and whose components were marked `skip_quantization`, so `-q 4` wrote an FP8 checkpoint stamped `quantization_level: 4` and only the VAE was touched. Adds `Fp8Linear.to_quantized`, drops the skip flags, derives bits and group size from the stored shapes when rebuilding a saved checkpoint instead of assuming q8/group-64, and rebuilds quantized embeddings as embeddings rather than linears. `-q 8` is 26 GB and `-q 4` is 14 GB, both visually indistinguishable from FP8. (#559)
