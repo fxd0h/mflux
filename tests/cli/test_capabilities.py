@@ -179,6 +179,17 @@ def test_capabilities_types_stay_in_the_wire_vocabulary(caps):
         for option in command["options"]:
             assert option["type"] in allowed, f"{command['command']} {option['flag']} publishes {option['type']!r}"
 
+    # And each converter maps to its own wire type, not merely to something in the
+    # vocabulary: one representative option per converter.
+    def type_of(command_name: str, flag: str) -> str:
+        command = next(c for c in caps["commands"] if c["command"] == command_name)
+        return next(o for o in command["options"] if o["flag"] == flag)["type"]
+
+    assert type_of("mflux-generate", "--vae-tile-size") == "int"
+    assert type_of("mflux-generate", "--mlx-cache-limit-gb") == "float"
+    assert type_of("mflux-upscale-seedvr2", "--resolution") == "int-or-scale"
+    assert type_of("mflux-upscale-seedvr2", "--image-path") == "path"
+
 
 @pytest.mark.fast
 def test_jsonable_preserves_mappings():
