@@ -11,8 +11,6 @@ import math
 import time
 
 import mlx.core as mx
-import mlx.nn as nn
-from mlx.utils import tree_unflatten
 
 from mflux.callbacks.callback_registry import CallbackRegistry
 from mflux.models.common.config import ModelConfig
@@ -27,10 +25,10 @@ from mflux.models.lens.model.text_encoder.lens_gpt_oss_encoder import (
     LensGptOssEncoder,
 )
 from mflux.models.lens.model.transformer.lens_transformer import LensTransformer
+from mflux.models.lens.weights.lens_weight_definition import TURBO_WEIGHTS_PATTERN, LensWeightDefinition
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.image_util import ImageUtil
 
-TURBO_WEIGHTS_PATTERN = "diffusion_models/lens_turbo_bf16.safetensors"
 VAE_REPO = "black-forest-labs/FLUX.2-klein-4B"
 
 
@@ -52,15 +50,23 @@ class LensImage:
         )
         self.text_encoder = LensGptOssEncoder(str(encoder_root))
 
-        dit_root = PathResolution.resolve(
-            path=model_path or self.model_config.model_name,
-            patterns=[TURBO_WEIGHTS_PATTERN],
-        )
+        # The DiT loads through the shared seam rather than a raw mx.load: same hub and
+        # local-path resolution as every other model, and a checkpoint that mflux saved
+        # already quantized reloads through the applier's stored-quantization path.
+        transformer_component = LensWeightDefinition.get_components()[0]
         self.transformer = LensTransformer()
-        weights = mx.load(str(dit_root / TURBO_WEIGHTS_PATTERN))
-        self.transformer.update(tree_unflatten([(k, v.astype(mx.bfloat16)) for k, v in weights.items()]))
-        if quantize is not None:
-            nn.quantize(self.transformer, bits=quantize, class_predicate=lambda p, m: hasattr(m, "to_quantized"))
+        transformer_weights = WeightLoader.load_single(
+            component=transformer_component,
+            repo_id=model_path or self.model_config.model_name,
+            file_pattern=TURBO_WEIGHTS_PATTERN,
+        )
+        WeightApplier.apply_and_quantize_single(
+            transformer_weights,
+            self.transformer,
+            transformer_component,
+            quantize,
+            quantization_predicate=LensWeightDefinition.quantization_predicate,
+        )
         mx.eval(self.transformer.parameters())
 
         vae_component = [c for c in Flux2KleinWeightDefinition.get_components() if c.name == "vae"][0]
