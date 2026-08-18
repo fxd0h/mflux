@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🐛 Bug Fixes
+
+- **`mflux-capabilities` publishes wire types, not Python converter names**: options validated by a named converter leaked the function name as their type (`--vae-tile-size` claimed type `vae_tile_size`, `--mlx-cache-limit-gb` claimed `positive_float`, every Path option claimed `PosixPath`). Named converters now map to what they yield: `int`, `float`, `path`, and `int-or-scale` for values that accept a pixel count, a `2x` factor or `auto`. The dump's type field is pinned to that closed vocabulary by a test. (#578, #652)
+
 ## [0.19.0] - 2026-08-18
 
 ### ⚠️ Behavior Changes
