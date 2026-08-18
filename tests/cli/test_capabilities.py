@@ -169,6 +169,18 @@ def test_capabilities_lambda_converter_publishes_default_type():
 
 
 @pytest.mark.fast
+def test_capabilities_types_stay_in_the_wire_vocabulary(caps):
+    # Named converters used to leak their Python function names as types
+    # (vae_tile_size, positive_float, int_or_special_value, PosixPath). The dump's type
+    # field is a closed vocabulary; a new converter must be added to
+    # _CONVERTER_WIRE_TYPES, and this names the leak when it isn't.
+    allowed = {"str", "int", "float", "bool", "path", "int-or-scale"}
+    for command in caps["commands"]:
+        for option in command["options"]:
+            assert option["type"] in allowed, f"{command['command']} {option['flag']} publishes {option['type']!r}"
+
+
+@pytest.mark.fast
 def test_jsonable_preserves_mappings():
     # A dict default must stay a JSON object, not become a Python repr string.
     from pathlib import Path
