@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 🐛 Bug Fixes
 
 - **Foreign `--model` values are rejected on the boogu, z-image, flux2 and ideogram4 CLIs**: all of them silently ignored a builtin name from another family and ran their own model instead (`mflux-generate-boogu --model dev` ran Boogu; `mflux-generate-ideogram4 --model qwen-image` ran Ideogram). They now resolve through the same restriction as the krea2/lens/ernie/z-image-turbo CLIs: aliases of the command's own model (or, for flux2, any registry `flux2-` entry, and for z-image, its distilled sibling) are accepted, anything else errors during CLI startup before any weights move, and paths or repo ids keep loading through `model_path` as before. flux2-edit additionally enforces the same distilled-checkpoint `--guidance 1.0` rule as flux2-generate. (#578, #650)
+- **`mflux-capabilities` publishes wire types, not Python converter names**: options validated by a named converter leaked the function name as their type (`--vae-tile-size` claimed type `vae_tile_size`, `--mlx-cache-limit-gb` claimed `positive_float`, every Path option claimed `PosixPath`). Named converters now map to what they yield: `int`, `float`, `path`, and `int-or-scale` for values that accept a pixel count, a `2x` factor or `auto`. The dump's type field is pinned to that closed vocabulary by a test. (#578, #652)
 
 ## [0.19.0] - 2026-08-18
 

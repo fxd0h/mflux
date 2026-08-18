@@ -24,7 +24,10 @@ import argparse
 import importlib.metadata
 import json
 import sys
+from pathlib import Path
 from typing import Any
+
+from mflux.cli.parser import parsers as _parsers
 
 SCHEMA_VERSION = 1
 
@@ -47,6 +50,19 @@ def discover_commands() -> list[tuple[str, str]]:
     return sorted(set(found))
 
 
+# Named converters publish the wire type of what they yield, not their Python function
+# name: `--vae-tile-size` takes an int whether or not a validator named vae_tile_size
+# clamps it, and a path is a path however pathlib spells it. Keyed by identity so a
+# renamed converter cannot silently fall back to leaking its new name.
+_CONVERTER_WIRE_TYPES = {
+    _parsers.positive_float: "float",
+    _parsers.finite_float: "float",
+    _parsers.vae_tile_size: "int",
+    _parsers.int_or_special_value: "int-or-scale",
+    Path: "path",
+}
+
+
 def _option_type_name(action: argparse.Action) -> str:
     if isinstance(action, (argparse._StoreTrueAction, argparse._StoreFalseAction)):
         return "bool"
@@ -54,6 +70,11 @@ def _option_type_name(action: argparse.Action) -> str:
         return "bool"
     if action.type is None:
         return "str"
+    try:
+        if action.type in _CONVERTER_WIRE_TYPES:
+            return _CONVERTER_WIRE_TYPES[action.type]
+    except TypeError:  # an unhashable custom converter object; fall through to its name
+        pass
     name = getattr(action.type, "__name__", str(action.type))
     if name == "<lambda>":
         # An anonymous converter has no publishable name; the default's type is the
