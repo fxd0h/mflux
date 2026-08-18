@@ -484,13 +484,6 @@ class CommandLineParser(argparse.ArgumentParser):
                     namespace.controlnet_image_path = prior_gen_metadata.get("controlnet_image_path", None)
                 if namespace.controlnet_strength == self.get_default("controlnet_strength") and (cnet_strength_from_metadata := prior_gen_metadata.get("controlnet_strength", None)):
                     namespace.controlnet_strength = cnet_strength_from_metadata
-                if not self._option_was_provided("--controlnet-save-canny", "--no-controlnet-save-canny") and (cnet_canny_from_metadata := prior_gen_metadata.get("controlnet_save_canny", None)) is not None:
-                    namespace.controlnet_save_canny = cnet_canny_from_metadata
-
-
-            if self.supports_image_outpaint:
-                if namespace.image_outpaint_padding is None:
-                    namespace.image_outpaint_padding = prior_gen_metadata.get("image_outpaint_padding", None)
 
             if hasattr(namespace, "pid_decode") and not self._option_was_provided("--pid-decode", "--no-pid-decode"):
                 namespace.pid_decode = prior_gen_metadata.get("pid_decode", False)
@@ -569,7 +562,6 @@ class CommandLineParser(argparse.ArgumentParser):
         if self.supports_image_outpaint and namespace.image_outpaint_padding is not None:
             # parse and normalize any acceptable 1,2,3,4-tuple box value to 4-tuple
             namespace.image_outpaint_padding = box_values.BoxValues.parse(namespace.image_outpaint_padding)
-            print(f"{namespace.image_outpaint_padding=}")
 
         # Resolve lora paths from library if needed
         if self.supports_lora and hasattr(namespace, "lora_paths") and namespace.lora_paths:
