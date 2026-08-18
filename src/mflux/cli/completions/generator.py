@@ -10,14 +10,15 @@ from mflux.models.flux.variants.in_context.utils.in_context_loras import LORA_NA
 
 class CompletionGenerator:
     def __init__(self):
-        # Commands come from the installed console scripts, the same discovery
-        # mflux-capabilities uses, so a CLI wired into pyproject completes without this
-        # file changing. The hand-maintained list this replaces had drifted six commands
-        # behind (boogu, lens, both ernie-image, ideogram4, capabilities).
+        # Commands come from mflux's own console scripts, so a CLI wired into pyproject
+        # completes without this file changing. The hand-maintained list this replaces
+        # had drifted six commands behind (boogu, lens, both ernie-image, ideogram4,
+        # capabilities). Read off the mflux distribution rather than the global
+        # entry-point namespace so another installed package cannot inject a command.
         self._modules = {
             entry_point.name: entry_point.value.split(":")[0]
-            for entry_point in importlib.metadata.entry_points().select(group="console_scripts")
-            if entry_point.value.startswith("mflux.")
+            for entry_point in importlib.metadata.distribution("mflux").entry_points
+            if entry_point.group == "console_scripts"
         }
         self.commands = sorted(self._modules)
 
@@ -25,7 +26,10 @@ class CompletionGenerator:
         # A CLI that exposes build_parser() completes exactly what it parses; the
         # recipes below exist only for the commands that predate that convention and
         # build their parser inline in main().
-        module = importlib.import_module(self._modules[command])
+        try:
+            module = importlib.import_module(self._modules[command])
+        except Exception:  # noqa: BLE001 -- one broken CLI must not kill every other command's completions
+            module = None
         build_parser = getattr(module, "build_parser", None)
         if build_parser is not None:
             return build_parser()
@@ -73,10 +77,6 @@ class CompletionGenerator:
 
         elif command == "mflux-info":
             parser.add_info_arguments()
-
-        elif command == "mflux-capabilities":
-            parser.add_argument("--command", type=str, help="Only dump this command (e.g. mflux-generate-z-image).")
-            parser.add_argument("--format", type=str, choices=["json", "yaml", "markdown"], help="Output format")
 
         elif command == "mflux-completions":
             parser.add_argument("--print", action="store_true", help="Print completion script to stdout")

@@ -209,12 +209,17 @@ def _to_markdown(capabilities: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Dump which options each mflux CLI actually honours.")
     parser.add_argument(
         "--command", type=str, default=None, help="Only dump this command (e.g. mflux-generate-z-image)."
     )
     parser.add_argument("--format", type=str, default="json", choices=["json", "yaml", "markdown"])
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
 
     capabilities = build_capabilities()

@@ -74,8 +74,8 @@ def test_completion_generator_tracks_installed_console_scripts():
 
     installed = {
         entry_point.name
-        for entry_point in importlib.metadata.entry_points().select(group="console_scripts")
-        if entry_point.value.startswith("mflux.")
+        for entry_point in importlib.metadata.distribution("mflux").entry_points
+        if entry_point.group == "console_scripts"
     }
     assert set(generator.commands) == installed
     for command in (
