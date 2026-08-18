@@ -61,7 +61,10 @@ def main():
 
     if args.guidance is None:
         args.guidance = 1.0
-    is_distilled = "base" not in model_config.model_name.lower()
+    # Judged only for builtin names: a custom checkpoint (model_path set) keeps the
+    # default entry's config, whose name says nothing about the weights actually loaded,
+    # and a klein-base fine-tune must not have its guidance rejected for it.
+    is_distilled = args.model_path is None and "base" not in model_config.model_name.lower()
     if args.guidance != 1.0 and is_distilled:
         parser.error("--guidance is only supported for FLUX.2 base models. Use --guidance 1.0.")
 
