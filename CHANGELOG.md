@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 🐛 Bug Fixes
 
 - **The metadata sidecar of an in-context result can reproduce the run**: `get_right_half()` dropped `negative_prompt`, `image_paths` and the redux fields when cloning metadata onto the cropped half, and the `--save-full-image` composite was saved without a sidecar even under `--metadata`. `redux_image_paths` was also serialized as a Python repr (`"['a.png', 'b.png']"`) instead of a list, so `--config-from-metadata` could never read it back. The unreachable restore branches for `controlnet_save_canny` and `image_outpaint_padding`, keys no released writer has ever emitted, are removed along with a stray debug `print()` in the outpaint parse block. (#578, #649)
+- **`mflux-capabilities` publishes wire types, not Python converter names**: options validated by a named converter leaked the function name as their type (`--vae-tile-size` claimed type `vae_tile_size`, `--mlx-cache-limit-gb` claimed `positive_float`, every Path option claimed `PosixPath`). Named converters now map to what they yield: `int`, `float`, `path`, and `int-or-scale` for values that accept a pixel count, a `2x` factor or `auto`. The dump's type field is pinned to that closed vocabulary by a test. (#578, #652)
 
 ## [0.19.0] - 2026-08-18
 
