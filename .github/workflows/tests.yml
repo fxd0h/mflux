@@ -32,8 +32,8 @@ jobs:
       # Kept as uvx (not uv run) so the lint job stays fast — no full venv.
       - name: Run ruff
         run: |
-          uvx ruff@0.16.3 check src tests
-          uvx ruff@0.16.3 format --check src tests
+          uvx ruff@0.16.3 check src tests scripts
+          uvx ruff@0.16.3 format --check src tests scripts
 
       - name: Install just
         uses: ./.github/actions/just-setup

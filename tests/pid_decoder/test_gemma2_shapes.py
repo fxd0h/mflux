@@ -61,8 +61,13 @@ def test_gemma2_model_is_causal():
         head_dim=8,
     )
     model = Gemma2Model(config)
+    # Both sequences must stay inside vocab_size (32): token 99 was an out-of-bounds
+    # embedding lookup, which MLX does not bounds-check on GPU, so position 3's row came
+    # from whatever memory the gather landed on and the "outputs must differ" half of
+    # this test failed in roughly one full-suite run out of three, while passing in
+    # isolation, where the heap it read was fresh.
     input_ids_a = mx.array([[1, 2, 3, 4]])
-    input_ids_b = mx.array([[1, 2, 3, 99]])
+    input_ids_b = mx.array([[1, 2, 3, 31]])
 
     out_a = model(input_ids_a)
     out_b = model(input_ids_b)
