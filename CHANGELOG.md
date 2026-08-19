@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔒 Security
+
+- **Locked dependencies updated beyond all reported vulnerable ranges**: raises the minimum supported versions of Pillow, Requests, PyTorch, Transformers, and urllib3, refreshes affected transitive dependencies, and removes the now-unused cryptography dependency from the lock. This addresses 35 Dependabot findings: 19 high, 12 medium, and 4 low. (#655)
+
 ### 🐛 Bug Fixes
 
 - **Foreign `--model` values are rejected on the boogu, z-image, flux2 and ideogram4 CLIs**: all of them silently ignored a builtin name from another family and ran their own model instead (`mflux-generate-boogu --model dev` ran Boogu; `mflux-generate-ideogram4 --model qwen-image` ran Ideogram). They now resolve through the same restriction as the krea2/lens/ernie/z-image-turbo CLIs: aliases of the command's own model (or, for flux2, any registry `flux2-` entry, and for z-image, its distilled sibling) are accepted, anything else errors during CLI startup before any weights move, and paths or repo ids keep loading through `model_path` as before. flux2-edit additionally enforces the same distilled-checkpoint `--guidance 1.0` rule as flux2-generate. (#578, #650)
+- **Shell completions cover every installed command**: the generator's hand-maintained list had drifted six commands behind pyproject (`mflux-generate-boogu`, `mflux-generate-lens`, both `mflux-generate-ernie-image` commands, `mflux-generate-ideogram4`, `mflux-capabilities` never completed). Commands are now discovered from the installed console scripts and, where a CLI exposes `build_parser()`, completions are generated from the CLI's real parser instead of a hand-copied recipe of it. (#578, #651)
 - **`mflux-capabilities` publishes wire types, not Python converter names**: options validated by a named converter leaked the function name as their type (`--vae-tile-size` claimed type `vae_tile_size`, `--mlx-cache-limit-gb` claimed `positive_float`, every Path option claimed `PosixPath`). Named converters now map to what they yield: `int`, `float`, `path`, and `int-or-scale` for values that accept a pixel count, a `2x` factor or `auto`. The dump's type field is pinned to that closed vocabulary by a test. (#578, #652)
 
 ## [0.19.0] - 2026-08-18

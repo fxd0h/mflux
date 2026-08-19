@@ -1,4 +1,6 @@
 import argparse
+import importlib
+import importlib.metadata
 from pathlib import Path
 
 from mflux.cli.defaults import defaults as ui_defaults
@@ -8,198 +10,33 @@ from mflux.models.flux.variants.in_context.utils.in_context_loras import LORA_NA
 
 class CompletionGenerator:
     def __init__(self):
-        self.commands = [
-            "mflux-generate",
-            "mflux-generate-flux2",
-            "mflux-generate-flux2-edit",
-            "mflux-generate-controlnet",
-            "mflux-generate-kontext",
-            "mflux-generate-in-context",
-            "mflux-generate-in-context-edit",
-            "mflux-generate-in-context-catvton",
-            "mflux-generate-fill",
-            "mflux-generate-depth",
-            "mflux-generate-redux",
-            "mflux-generate-qwen",
-            "mflux-generate-qwen-edit",
-            "mflux-generate-fibo",
-            "mflux-generate-fibo-edit",
-            "mflux-generate-z-image",
-            "mflux-generate-z-image-turbo",
-            "mflux-generate-z-image-controlnet",
-            "mflux-generate-krea2",
-            "mflux-refine-fibo",
-            "mflux-inspire-fibo",
-            "mflux-concept",
-            "mflux-concept-from-image",
-            "mflux-save",
-            "mflux-save-depth",
-            "mflux-train",
-            "mflux-upscale-controlnet",
-            "mflux-upscale-seedvr2",
-            "mflux-lora-library",
-            "mflux-info",
-            "mflux-completions",
-        ]
+        # Commands come from mflux's own console scripts, so a CLI wired into pyproject
+        # completes without this file changing. The hand-maintained list this replaces
+        # had drifted six commands behind (boogu, lens, both ernie-image, ideogram4,
+        # capabilities). Read off the mflux distribution rather than the global
+        # entry-point namespace so another installed package cannot inject a command.
+        self._modules = {
+            entry_point.name: entry_point.value.split(":")[0]
+            for entry_point in importlib.metadata.distribution("mflux").entry_points
+            if entry_point.group == "console_scripts"
+        }
+        self.commands = sorted(self._modules)
 
     def create_parser_for_command(self, command: str) -> CommandLineParser:
+        # A CLI that exposes build_parser() completes exactly what it parses; the
+        # recipes below exist only for the commands that predate that convention and
+        # build their parser inline in main().
+        try:
+            module = importlib.import_module(self._modules[command])
+        except Exception:  # noqa: BLE001 -- one broken CLI must not kill every other command's completions
+            module = None
+        build_parser = getattr(module, "build_parser", None)
+        if build_parser is not None:
+            return build_parser()
+
         parser = CommandLineParser(prog=command, add_help=False)
 
-        if command == "mflux-generate":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
-            parser.add_image_to_image_arguments()
-            parser.add_image_outpaint_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-flux2":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-flux2-edit":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_paths_arguments()
-            parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-controlnet":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=True)
-            parser.add_lora_arguments()
-            parser.add_controlnet_arguments()
-            parser.add_image_generator_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-kontext":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
-            parser.add_image_to_image_arguments(required=True)
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-in-context":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_image_generator_arguments()
-            parser.add_image_to_image_arguments(required=True)
-            parser.add_in_context_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-in-context-edit":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments(supports_metadata_config=False, require_prompt=False)
-            parser.add_in_context_edit_arguments()
-            parser.add_in_context_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-in-context-catvton":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments(supports_metadata_config=False, require_prompt=False)
-            parser.add_catvton_arguments()
-            parser.add_in_context_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-fill":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments()
-            parser.add_fill_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-depth":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments()
-            parser.add_depth_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-redux":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments()
-            parser.add_redux_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-qwen":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments(supports_metadata_config=True)
-            parser.add_image_to_image_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-qwen-edit":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
-            parser.add_image_paths_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-fibo":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_image_generator_arguments(supports_metadata_config=True)
-            parser.add_image_to_image_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-fibo-edit":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.set_defaults(model="fibo-edit")
-            parser.add_image_generator_arguments(
-                supports_metadata_config=True,
-                require_prompt=False,
-                supports_dimension_scale_factor=True,
-            )
-            parser.add_argument(
-                "--image-path", type=Path, required=False, help="Local path to source image for editing."
-            )
-            parser.add_argument(
-                "--mask-path", type=Path, default=None, help="Optional mask image path for localized edits."
-            )
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-z-image-controlnet":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments(supports_metadata_config=False)
-            parser.add_union_controlnet_arguments(require_controls=True)
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-z-image-turbo":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments(supports_metadata_config=True)
-            parser.add_image_to_image_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-generate-krea2":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
-            parser.add_image_to_image_arguments(required=False)
-            parser.add_output_arguments()
-
-        elif command == "mflux-refine-fibo":
+        if command == "mflux-refine-fibo":
             parser.add_argument("--prompt-file", type=Path, required=True, help="Path to JSON prompt file to refine")
             parser.add_argument("--instructions", type=str, required=True, help="Text instructions for refinement")
             parser.add_argument("--output", type=Path, help="Output path for refined JSON prompt")
@@ -219,20 +56,6 @@ class CompletionGenerator:
             parser.add_argument("--max-tokens", type=int, help="Max tokens for VLM generation")
             parser.add_argument("--seed", type=int, help="Seed for VLM generation")
 
-        elif command == "mflux-concept":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=True)
-            parser.add_concept_attention_arguments()
-            parser.add_image_generator_arguments()
-            parser.add_output_arguments()
-
-        elif command == "mflux-concept-from-image":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=True)
-            parser.add_concept_from_image_arguments()
-            parser.add_image_generator_arguments()
-            parser.add_output_arguments()
-
         elif command == "mflux-save":
             parser.add_model_arguments(path_type="save", require_model_arg=True)
 
@@ -243,19 +66,6 @@ class CompletionGenerator:
         elif command == "mflux-train":
             parser.add_model_arguments(require_model_arg=False)
             parser.add_training_arguments()
-
-        elif command == "mflux-upscale-controlnet":
-            parser.add_general_arguments()
-            parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
-            parser.add_image_generator_arguments(supports_metadata_config=False, supports_dimension_scale_factor=True)
-            parser.add_controlnet_arguments(require_image=True)
-            parser.add_output_arguments()
-
-        elif command == "mflux-upscale-seedvr2":
-            parser.add_general_arguments()
-            parser.add_seedvr2_upscale_arguments()
-            parser.add_output_arguments()
 
         elif command == "mflux-lora-library":
             # Special case: has subcommands

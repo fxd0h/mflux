@@ -61,3 +61,43 @@ def test_completion_generator_includes_atomic_lora_and_image_flags():
     assert "'--image''[" in script
     assert "'--lora-paths''[" in script
     assert "'--image-path''[" in script
+
+
+@pytest.mark.fast
+def test_completion_generator_tracks_installed_console_scripts():
+    # The command list is read off the installed entry points, so it can no longer
+    # drift behind pyproject the way the hand list did (it was six commands behind:
+    # boogu, lens, both ernie-image, ideogram4 and capabilities).
+    import importlib.metadata
+
+    generator = CompletionGenerator()
+
+    installed = {
+        entry_point.name
+        for entry_point in importlib.metadata.distribution("mflux").entry_points
+        if entry_point.group == "console_scripts"
+    }
+    assert set(generator.commands) == installed
+    for command in (
+        "mflux-generate-boogu",
+        "mflux-generate-lens",
+        "mflux-generate-ernie-image",
+        "mflux-generate-ernie-image-turbo",
+        "mflux-generate-ideogram4",
+        "mflux-capabilities",
+    ):
+        assert command in generator.commands
+
+
+@pytest.mark.fast
+def test_completion_generator_prefers_the_cli_own_parser():
+    # A build_parser command completes what its CLI actually parses; drift between the
+    # completion recipe and the real parser is impossible for these. Lens never had a
+    # recipe in the old hand-maintained chain, so its flags only complete via this path.
+    generator = CompletionGenerator()
+
+    script = generator.generate_command_function(
+        "mflux-generate-lens", generator.create_parser_for_command("mflux-generate-lens")
+    )
+    assert "_mflux_generate_lens()" in script
+    assert "--prompt" in script
