@@ -109,6 +109,12 @@ release:
     fi
     gh run watch "$run_id" --exit-status
 
+# Extract the supported-model registry to .ci_cache/models_mflux.json
+ci-extract:
+    @echo "🏗️ Extracting model registry..."
+    uv run --no-sync python scripts/ci_extract_models.py
+    @echo "✅ Extraction complete."
+
 # Remove the virtual environment
 clean:
     @echo "🧼 Cleaning up venv."

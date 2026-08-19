@@ -1,0 +1,73 @@
+name: ci-extract
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  extract:
+    runs-on: macos-14  # Apple Silicon runner (M1) — model_config.py imports mlx.core
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d  # v10.0.0
+        with:
+          version: "0.12.4"  # pinned uv: makes uv.lock rendering reproducible
+          python-version: "3.13"  # newest fully-supported version
+          activate-environment: true
+
+      # --no-dev: the script only needs mflux's runtime deps (it imports
+      # ModelConfig, nothing from the dev group: pytest/ruff/ty/matplotlib).
+      - name: Install dependencies
+        run: |
+          uv sync --locked --no-dev
+
+      # Calls the script directly rather than `just ci-extract`: macos-14 runners
+      # don't ship just, and installing it for one call isn't worth the dependency.
+      - name: Extract model registry
+        run: uv run --no-sync python scripts/ci_extract_models.py
+
+      - name: Resolve HF bucket destination
+        id: dest
+        env:
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ "$REPO" = "mflux-community/mflux" ]; then
+            echo "path=hf://buckets/mflux-community/ci" >> "$GITHUB_OUTPUT"
+            echo "sync=true" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "path=hf://buckets/mflux-community/ci/dev/@${OWNER}" >> "$GITHUB_OUTPUT"
+            echo "sync=true" >> "$GITHUB_OUTPUT"
+          else
+            # Non-canonical repo, push-triggered: extract already ran as a build
+            # check; skip publishing since push-on-fork isn't an approved auto-sync trigger.
+            echo "sync=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # `hf sync`/bucket support needs huggingface_hub>=1.13; mflux pins <2.0 which
+      # resolves to 1.3.2 (no bucket support at all). uvx a newer hf here, decoupled
+      # from the project's runtime dependency floor.
+      # No --delete flag: adding one would apply to the whole bucket path, including
+      # the dev/@<owner> subtree on canonical, not just this run's own destination.
+      - name: Sync to HF bucket
+        if: steps.dest.outputs.sync == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_CI_BUCKET_TOKEN }}
+        run: >
+          uvx --from 'huggingface_hub>=1.13,<2'
+          hf sync .ci_cache "${{ steps.dest.outputs.path }}"
