@@ -114,6 +114,73 @@ def test_pid_flags_are_absent_from_metadata_without_pid_decode(tmp_path):
     assert "pid_degrade_sigma" not in metadata
 
 
+def test_get_right_half_keeps_every_metadata_attribute():
+    original = GeneratedImage(
+        image=Image.new("RGB", (16, 16), "white"),
+        model_config=ModelConfig.dev(),
+        seed=42,
+        prompt="test prompt",
+        steps=20,
+        guidance=3.5,
+        precision=mx.bfloat16,
+        quantization=8,
+        generation_time=1.23,
+        lora_paths=["style.safetensors"],
+        lora_scales=[0.8],
+        height=16,
+        width=16,
+        controlnet_image_path="control.png",
+        controlnet_strength=0.6,
+        image_path="init.png",
+        image_paths=["ref1.png", "ref2.png"],
+        image_strength=0.4,
+        masked_image_path="mask.png",
+        depth_image_path="depth.png",
+        redux_image_paths=["redux1.png", "redux2.png"],
+        redux_image_strengths=[0.5, 0.7],
+        concept_heatmap=None,
+        negative_prompt="blurry",
+        init_metadata={"source": "test"},
+        pid_decode=True,
+        pid_degrade_sigma=0.2,
+    )
+
+    half = original.get_right_half()
+
+    # The right half is the deliverable of the in-context commands, so its sidecar must
+    # reproduce the run. Compare every stored attribute except the cropped image itself.
+    original_attrs = {k: v for k, v in vars(original).items() if k != "image"}
+    half_attrs = {k: v for k, v in vars(half).items() if k != "image"}
+    assert half_attrs == original_attrs
+    assert half.image.size == (8, 16)
+
+
+def test_redux_image_paths_export_as_a_list(tmp_path):
+    output_path = tmp_path / "redux_output.png"
+    generated_image = GeneratedImage(
+        image=Image.new("RGB", (16, 16), "white"),
+        model_config=ModelConfig.dev(),
+        seed=42,
+        prompt="test prompt",
+        steps=20,
+        guidance=3.5,
+        precision=mx.bfloat16,
+        quantization=8,
+        generation_time=1.23,
+        height=16,
+        width=16,
+        redux_image_paths=["redux1.png", "redux2.png"],
+        redux_image_strengths=[0.5, 0.7],
+    )
+
+    generated_image.save(path=output_path, overwrite=True, export_json_metadata=True)
+
+    metadata = json.loads(output_path.with_suffix(".metadata.json").read_text())
+    # Was str(list), i.e. a Python repr the restore side could never parse back.
+    assert metadata["redux_image_paths"] == ["redux1.png", "redux2.png"]
+    assert metadata["image_paths"] is None
+
+
 def test_fibo_edit_save_keeps_prompt_json_and_exports_metadata_separately(tmp_path):
     output_path = tmp_path / "fibo_edit_output.png"
     prompt = json.dumps(

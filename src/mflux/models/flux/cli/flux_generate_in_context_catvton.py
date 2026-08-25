@@ -76,7 +76,7 @@ def main():
             output_path = Path(args.output.format(seed=seed))
             image.get_right_half().save(path=output_path, export_json_metadata=args.metadata)
             if args.save_full_image:
-                image.save(path=output_path.with_stem(output_path.stem + "_full"))
+                image.save(path=output_path.with_stem(output_path.stem + "_full"), export_json_metadata=args.metadata)
 
     except (StopImageGenerationException, PromptFileReadError) as exc:
         print(exc)

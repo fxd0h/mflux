@@ -643,10 +643,11 @@ def test_image_outpaint_args(mflux_generate_parser, mflux_generate_minimal_argv,
         args = mflux_generate_parser.parse_args()
         assert args.image_outpaint_padding is None
 
-    # test metadata config accepted
+    # A sidecar key is ignored: no released writer ever emitted image_outpaint_padding,
+    # so the restore branch for it was deleted rather than kept for hand-edited files.
     with patch('sys.argv', mflux_generate_minimal_argv + ['--config-from-metadata', metadata_file.as_posix()]):  # fmt: off
         args = mflux_generate_parser.parse_args()
-        assert args.image_outpaint_padding == BoxValues(10, 20, 30, 40)
+        assert args.image_outpaint_padding is None
 
     # test outpaint padding override in 4-value format
     with patch('sys.argv', mflux_generate_minimal_argv + ['--image-outpaint-padding', '5,15,25,35', '--config-from-metadata', metadata_file.as_posix()]):  # fmt: off
