@@ -163,15 +163,17 @@ class CommandLineParser(argparse.ArgumentParser):
             self.add_argument("--width", type=int_or_special_value, default="auto", help="Image width (Default is source image width)")
         else:
             self.add_argument("--height", type=int, default=ui_defaults.HEIGHT, help=f"Image height (Default is {ui_defaults.HEIGHT})")
-            self.add_argument("--width", type=int, default=ui_defaults.WIDTH, help=f"Image width (Default is {ui_defaults.HEIGHT})")
+            self.add_argument("--width", type=int, default=ui_defaults.WIDTH, help=f"Image width (Default is {ui_defaults.WIDTH})")
 
         self.add_argument("--steps", type=int, default=None, help="Inference Steps")
         self.add_argument("--guidance", type=float, default=None, help=f"Guidance Scale (Default varies by tool: {ui_defaults.GUIDANCE_SCALE} for most, {ui_defaults.DEFAULT_DEV_FILL_GUIDANCE} for fill tools, {ui_defaults.DEFAULT_DEPTH_GUIDANCE} for depth)")
 
     def add_image_generator_arguments(self, supports_metadata_config=False, require_prompt=True, supports_dimension_scale_factor=False) -> None:
-        prompt_group = self.add_mutually_exclusive_group(required=(require_prompt and not supports_metadata_config))
-        prompt_group.add_argument("--prompt", type=str, help="The textual description of the image to generate.")
-        prompt_group.add_argument("--prompt-file", type=Path, help="Path to a file containing the prompt text. The file will be re-read before each generation, allowing you to edit the prompt between iterations when using multiple seeds without restarting the program.")
+        # Kept on self so add_in_context_edit_arguments can put --instruction in the
+        # same group: exclusivity declared here is what mflux-capabilities publishes.
+        self._prompt_group = self.add_mutually_exclusive_group(required=(require_prompt and not supports_metadata_config))
+        self._prompt_group.add_argument("--prompt", type=str, help="The textual description of the image to generate.")
+        self._prompt_group.add_argument("--prompt-file", type=Path, help="Path to a file containing the prompt text. The file will be re-read before each generation, allowing you to edit the prompt between iterations when using multiple seeds without restarting the program.")
         self.add_argument("--negative-prompt", type=str, default="", help="The negative prompt to guide what the model should not generate.")
         self.add_argument("--seed", type=int, default=None, nargs='+', help="Specify 1+ Entropy Seeds (Default is 1 time-based random-seed)")
         self.add_argument("--auto-seeds", type=int, default=-1, help="Auto generate N Entropy Seeds (random ints between 0 and 1 billion")
@@ -214,7 +216,9 @@ class CommandLineParser(argparse.ArgumentParser):
     def add_in_context_edit_arguments(self) -> None:
         self.supports_in_context_edit = True
         self.add_argument("--reference-image", type=str, required=True, help="Path to reference image")
-        self.add_argument("--instruction", type=str, help="User instruction to be wrapped in diptych template (e.g., 'make the hair black'). This will be automatically formatted as 'A diptych with two side-by-side images of the same scene. On the right, the scene is exactly the same as on the left but {instruction}'. Either --instruction or --prompt is required.")  # fmt:off
+        # Joins the prompt/prompt-file group so argparse owns the exclusivity and the
+        # capabilities dump shows it; "one of them is required" stays post-parse.
+        self._prompt_group.add_argument("--instruction", type=str, help="User instruction to be wrapped in diptych template (e.g., 'make the hair black'). This will be automatically formatted as 'A diptych with two side-by-side images of the same scene. On the right, the scene is exactly the same as on the left but {instruction}'. Either --instruction or --prompt is required.")  # fmt:off
 
     def add_in_context_arguments(self) -> None:
         self.add_argument("--save-full-image", action="store_true", default=False, help="Additionally, save the full image containing the reference image. Useful for verifying the in-context usage of the reference image.")
@@ -577,13 +581,11 @@ class CommandLineParser(argparse.ArgumentParser):
             model_name = getattr(namespace, "model", None) or self.default_model
             namespace.steps = ui_defaults.model_inference_steps(model_name)
 
-        # In-context edit specific validations
+        # In-context edit: exclusivity lives in the argparse group; only the
+        # "at least one" half needs a post-parse check.
         if getattr(self, 'supports_in_context_edit', False):
             if not getattr(namespace, 'prompt', None) and not getattr(namespace, 'instruction', None):
                 self.error("Either --prompt or --instruction argument is required for in-context editing")
-
-            if getattr(namespace, 'prompt', None) and getattr(namespace, 'instruction', None):
-                self.error("Cannot use both --prompt and --instruction. Choose one.")
 
         if self.supports_image_outpaint and namespace.image_outpaint_padding is not None:
             # parse and normalize any acceptable 1,2,3,4-tuple box value to 4-tuple
