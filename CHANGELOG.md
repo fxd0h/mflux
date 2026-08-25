@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### ✨ Improvements
+
+- **Training loss monitoring no longer taxes the run**: the loop computed a loss every step and discarded it, then paid up to 10 extra forward passes per plot tick for a smoothed re-read of training samples; with `plot_frequency: 1` that tripled wall time (5.4 vs 17.5 s/step on a Krea 2 Raw QLoRA, the 80 vs 232 hour run of #671). The already-computed value now feeds the loss curve every step for free, the batch metric became an optional second series at `plot_frequency` ticks, and `plot_frequency` is optional with a default of 20. Checkpoint loss statistics carry both series; a legacy checkpoint's single series loads as the batch metric it was. (#671, #672)
+
 ## [0.19.1] - 2026-08-20
 
 ### 🔒 Security
