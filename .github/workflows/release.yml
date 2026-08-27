@@ -9,7 +9,38 @@ on:
         type: string
 
 jobs:
+  # Ungated: harvests the release-note blocks from PRs merged since the last release and
+  # fills the DRAFT GitHub release. Whoever approves the pypi deployment below reads and
+  # edits that draft first; the gated job publishes it exactly as edited (#673).
+  draft-notes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d  # v10.0.0
+        with:
+          version: "0.12.4"  # pinned uv: reproducible build behavior
+          python-version: "3.13"
+          activate-environment: true
+
+      - name: Install dependencies
+        run: |
+          uv pip install -e . --no-deps
+          uv pip install toml requests
+
+      - name: Fill the draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m mflux.release.release_script --draft-notes
+
   release:
+    needs: draft-notes
     runs-on: ubuntu-latest
     # Deployment gate: requires reviewer approval and restricts publishable
     # branches per the environment's protection rules (Settings > Environments > pypi).

@@ -2,10 +2,10 @@ import os
 
 import requests
 
-from mflux.release.changelog_parser import ChangelogParser
 from mflux.release.git_operations import GitOperations
 from mflux.release.github_api import GitHubAPI
 from mflux.release.pypi_publisher import PyPIPublisher
+from mflux.release.release_notes import ReleaseNotes
 from mflux.release.release_validator import ReleaseValidator
 from mflux.utils.version_util import VersionUtil
 
@@ -55,12 +55,33 @@ class ReleaseManager:
         if not git_tag_exists:
             GitOperations.create_and_push_tag(tag_name, version)
 
-        # 6. Create GitHub release if needed
+        # 6. Publish the reviewed draft release (created by the draft-notes job, and
+        # possibly edited by whoever approved the pypi deployment). A missing draft
+        # falls back to harvesting fresh notes so a manual run still completes.
         if not github_release_exists:
-            release_notes = ChangelogParser.extract_release_notes_from_changelog(version)
-            GitHubAPI.create_github_release(github_token, github_repo, tag_name, version, release_notes)
+            draft = GitHubAPI.find_release(github_token, github_repo, tag_name)
+            if draft is not None and draft.get("draft", False):
+                GitHubAPI.publish_draft_release(github_token, github_repo, draft)
+            else:
+                release_notes = ReleaseManager._harvest_notes(github_token, github_repo, version)
+                GitHubAPI.create_github_release(github_token, github_repo, tag_name, version, release_notes)
 
         print(f"🎉 Release process completed successfully for version {version}!")
+
+    @staticmethod
+    def draft_notes(github_token: str, github_repo: str | None = None) -> None:
+        github_repo = github_repo or os.getenv("GITHUB_REPOSITORY", "mflux-community/mflux")
+        version = VersionUtil.get_mflux_version()
+        tag_name = f"v.{version}"
+        notes = ReleaseManager._harvest_notes(github_token, github_repo, version)
+        GitHubAPI.upsert_draft_release(github_token, github_repo, tag_name, version, notes)
+
+    @staticmethod
+    def _harvest_notes(github_token: str, github_repo: str, version: str) -> str:
+        since = ReleaseNotes.latest_release_date(github_token, github_repo)
+        prs = ReleaseNotes.collect_merged_prs(github_token, github_repo, since)
+        print(f"\U0001f4e5 Harvested {len(prs)} merged PRs since {since}")
+        return ReleaseNotes.render(version, prs)
 
     @staticmethod
     def _is_release_complete(git_tag_exists: bool, github_release_exists: bool) -> bool:

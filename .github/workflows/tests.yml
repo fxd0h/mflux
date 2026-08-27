@@ -14,6 +14,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Every PR must carry a fenced release-note block (or an explicit `none`) in its body;
+  # the release draft is harvested from those blocks (#673). The body comes from the event
+  # payload file, never template-expanded into the script.
+  release-note:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require a release-note block in the PR body
+        run: |
+          if jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" | grep -qiE '^```release-note[ \t\r]*$'; then
+            echo "release-note block found"
+          else
+            echo '::error::Add a ```release-note fenced block to the PR body (write `none` inside it for changes users never see).'
+            exit 1
+          fi
+
   lint:
     runs-on: ubuntu-latest
 

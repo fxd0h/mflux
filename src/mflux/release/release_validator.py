@@ -2,16 +2,12 @@ import os
 import re
 import subprocess
 
-from .changelog_parser import ChangelogParser
-
 
 class ReleaseValidator:
     @staticmethod
     def validate_release_ready(version: str) -> None:
         print("🔍 Validating release readiness...")
         ReleaseValidator._validate_version_format(version)
-        ReleaseValidator._validate_changelog_format()
-        ReleaseValidator._validate_changelog_entry(version)
         ReleaseValidator._validate_branch()
         ReleaseValidator._validate_uncommitted_changes()
         print(f"✅ Release validation passed for version {version}")
@@ -20,24 +16,6 @@ class ReleaseValidator:
     def _validate_version_format(version: str) -> None:
         if not re.match(r"^\d+\.\d+\.\d+", version):
             raise ValueError(f"Version format appears invalid: {version}")
-
-    @staticmethod
-    def _validate_changelog_entry(version: str) -> None:
-        try:
-            ChangelogParser.extract_release_notes_from_changelog(version)
-            print(f"✅ Changelog entry found for version {version}")
-
-            # Validate version consistency
-            latest_changelog_version = ChangelogParser.get_latest_version()
-            if version != latest_changelog_version:
-                raise ValueError(
-                    f"Version mismatch: pyproject.toml has version '{version}' but "
-                    f"latest changelog version is '{latest_changelog_version}'. "
-                    f"Please ensure pyproject.toml version matches the latest changelog entry."
-                )
-            print(f"✅ Version consistency validated: pyproject.toml ({version}) matches latest changelog entry")
-        except ValueError as e:
-            raise ValueError(f"Changelog validation failed: {e}")
 
     @staticmethod
     def _validate_branch() -> None:
@@ -57,22 +35,6 @@ class ReleaseValidator:
             )
 
         print(f"✅ On main branch ({current_branch})")
-
-    @staticmethod
-    def _validate_changelog_format() -> None:
-        try:
-            issues = ChangelogParser.validate_changelog_format()
-            if issues:
-                print("❌ Changelog format validation failed:")
-                for issue in issues:
-                    print(f"   • {issue}")
-                raise ValueError(f"Changelog format validation failed with {len(issues)} issues")
-            print("✅ Changelog format validation passed")
-        except ValueError as e:
-            if "Changelog format validation failed" in str(e):
-                raise  # Re-raise our own validation error
-            else:
-                raise ValueError(f"Changelog format validation failed: {e}")
 
     @staticmethod
     def _validate_uncommitted_changes() -> None:
