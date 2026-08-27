@@ -46,6 +46,7 @@ class ReleaseNotes:
                     "per_page": 100,
                     "page": page,
                 },
+                timeout=(5, 30),
             )
             if response.status_code != 200:
                 raise requests.HTTPError(
@@ -63,6 +64,7 @@ class ReleaseNotes:
         response = requests.get(
             f"https://api.github.com/repos/{github_repo}/releases/latest",
             headers=ReleaseNotes._headers(github_token),
+            timeout=(5, 30),
         )
         if response.status_code != 200:
             raise requests.HTTPError(

@@ -22,14 +22,21 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Require a release-note block in the PR body
+      - name: Require a complete release-note block in the PR body
+        # Mirrors ReleaseNotes._FENCE exactly (keep the two in sync): an opening fence
+        # without a closing fence, or an empty block, would pass a looser check here and
+        # then land in the draft as [needs edit].
         run: |
-          if jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" | grep -qiE '^```release-note[ \t\r]*$'; then
-            echo "release-note block found"
-          else
-            echo '::error::Add a ```release-note fenced block to the PR body (write `none` inside it for changes users never see).'
-            exit 1
-          fi
+          python3 - <<'PY'
+          import json, os, re, sys
+          event = json.load(open(os.environ["GITHUB_EVENT_PATH"]))
+          body = (event.get("pull_request") or {}).get("body") or ""
+          match = re.search(r"```release-note[ \t\r]*\n(.*?)```", body, re.DOTALL | re.IGNORECASE)
+          if match is None or not match.group(1).strip():
+              print("::error::Add a complete ```release-note fenced block to the PR body (write none inside it for changes users never see).")
+              sys.exit(1)
+          print("release-note block found")
+          PY
 
   lint:
     runs-on: ubuntu-latest

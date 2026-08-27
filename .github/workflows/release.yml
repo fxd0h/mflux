@@ -37,7 +37,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python -m mflux.release.release_script --draft-notes
+          uv run python -m mflux.release.release_script --draft-notes
 
   release:
     needs: draft-notes

@@ -74,7 +74,7 @@ class GitHubAPI:
             "User-Agent": "MFLUX-Release-Script",
         }
         url = f"https://api.github.com/repos/{github_repo}/releases"
-        response = requests.get(url, headers=headers, params={"per_page": 100})
+        response = requests.get(url, headers=headers, params={"per_page": 100}, timeout=(5, 30))
         if response.status_code != 200:
             raise requests.HTTPError(
                 f"GitHub API returned {response.status_code} listing releases: {response.text}", response=response
@@ -108,10 +108,10 @@ class GitHubAPI:
             "prerelease": False,
         }
         if existing is None:
-            response = requests.post(f"https://api.github.com/repos/{github_repo}/releases", json=data, headers=headers)  # fmt: off
+            response = requests.post(f"https://api.github.com/repos/{github_repo}/releases", json=data, headers=headers, timeout=(5, 30))  # fmt: off
             expected = 201
         else:
-            response = requests.patch(existing["url"], json=data, headers=headers)
+            response = requests.patch(existing["url"], json=data, headers=headers, timeout=(5, 30))
             expected = 200
         if response.status_code != expected:
             raise Exception(f"Failed to upsert draft release: {response.status_code} - {response.text}")
@@ -127,7 +127,7 @@ class GitHubAPI:
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "MFLUX-Release-Script",
         }
-        response = requests.patch(release["url"], json={"draft": False}, headers=headers)
+        response = requests.patch(release["url"], json={"draft": False}, headers=headers, timeout=(5, 30))
         if response.status_code != 200:
             raise Exception(f"Failed to publish draft release: {response.status_code} - {response.text}")
         print(f"\u2705 Published GitHub release {release.get('tag_name')}")
