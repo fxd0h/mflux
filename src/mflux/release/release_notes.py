@@ -3,7 +3,12 @@ import re
 import requests
 
 # GitHub PR bodies arrive with \r\n line endings; tolerate the \r on the fence line.
-_FENCE = re.compile(r"```release-note[ \t\r]*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+# Both fences are anchored to whole lines — GitHub only renders line-anchored fences,
+# so an inline triple-backtick mention in prose must not count as a block.
+_FENCE = re.compile(
+    r"^```release-note[ \t\r]*\n(.*?)^```[ \t\r]*$",
+    re.DOTALL | re.IGNORECASE | re.MULTILINE,
+)
 
 # Label -> section, first match wins in this order. PRs with no matching label land in
 # "Changed"; PRs with no release-note block land in their section flagged for the releaser.

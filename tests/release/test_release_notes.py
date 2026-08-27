@@ -32,6 +32,20 @@ def test_missing_block_and_empty_body_return_none():
 
 
 @pytest.mark.fast
+def test_fences_must_be_line_anchored():
+    # GitHub only renders fences that start their own line; an inline mention in prose
+    # (or a closing backtick glued to other text) is not a block.
+    inline = "Add a ```release-note\nlike this``` block to your PR body."
+    assert ReleaseNotes.extract_release_note(inline) is None
+
+    unclosed = "```release-note\nA note with no closing fence."
+    assert ReleaseNotes.extract_release_note(unclosed) is None
+
+    anchored = "```release-note\nA real note.\n```"
+    assert ReleaseNotes.extract_release_note(anchored) == "A real note."
+
+
+@pytest.mark.fast
 def test_render_groups_by_label_and_flags_missing_blocks():
     prs = [
         _pr(10, body="```release-note\nFaster startup.\n```", labels=["improvement"]),

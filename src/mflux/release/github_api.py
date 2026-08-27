@@ -74,15 +74,20 @@ class GitHubAPI:
             "User-Agent": "MFLUX-Release-Script",
         }
         url = f"https://api.github.com/repos/{github_repo}/releases"
-        response = requests.get(url, headers=headers, params={"per_page": 100}, timeout=(5, 30))
-        if response.status_code != 200:
-            raise requests.HTTPError(
-                f"GitHub API returned {response.status_code} listing releases: {response.text}", response=response
-            )
-        for release in response.json():
-            if release.get("tag_name") == tag_name:
-                return release
-        return None
+        page = 1
+        while True:
+            response = requests.get(url, headers=headers, params={"per_page": 100, "page": page}, timeout=(5, 30))
+            if response.status_code != 200:
+                raise requests.HTTPError(
+                    f"GitHub API returned {response.status_code} listing releases: {response.text}", response=response
+                )
+            releases = response.json()
+            for release in releases:
+                if release.get("tag_name") == tag_name:
+                    return release
+            if len(releases) < 100:
+                return None
+            page += 1
 
     @staticmethod
     def upsert_draft_release(

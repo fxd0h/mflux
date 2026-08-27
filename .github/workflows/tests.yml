@@ -31,7 +31,7 @@ jobs:
           import json, os, re, sys
           event = json.load(open(os.environ["GITHUB_EVENT_PATH"]))
           body = (event.get("pull_request") or {}).get("body") or ""
-          match = re.search(r"```release-note[ \t\r]*\n(.*?)```", body, re.DOTALL | re.IGNORECASE)
+          match = re.search(r"^```release-note[ \t\r]*\n(.*?)^```[ \t\r]*$", body, re.DOTALL | re.IGNORECASE | re.MULTILINE)
           if match is None or not match.group(1).strip():
               print("::error::Add a complete ```release-note fenced block to the PR body (write none inside it for changes users never see).")
               sys.exit(1)
