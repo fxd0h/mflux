@@ -96,7 +96,11 @@ def model_inference_steps(model_name: str | None, base_model: str | None = None)
     # DEFAULT_INFERENCE_STEPS, as does any registry entry with no declared count (the
     # SeedVR2 upscalers never step).
     if model_name is None:
-        return DEFAULT_INFERENCE_STEPS
+        # `--base-model schnell` with no --model asks for the base itself, the same
+        # promotion ConfigResolution makes.
+        if base_model is None:
+            return DEFAULT_INFERENCE_STEPS
+        model_name = base_model
 
     if model_name in MODEL_INFERENCE_STEPS:
         return MODEL_INFERENCE_STEPS[model_name]

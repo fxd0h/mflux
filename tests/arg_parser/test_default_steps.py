@@ -16,6 +16,7 @@ from mflux.models.common.config.model_config import AVAILABLE_MODELS
 from mflux.models.common.resolution.config_resolution import ConfigResolution
 from mflux.models.ernie_image.cli import ernie_image_generate, ernie_image_turbo_generate
 from mflux.models.fibo.cli import fibo_edit, fibo_generate
+from mflux.models.flux.cli import flux_generate
 from mflux.models.flux2.cli import flux2_edit_generate, flux2_generate
 from mflux.models.ideogram4.cli import ideogram4_generate
 from mflux.models.krea2.cli import krea2_generate
@@ -145,6 +146,7 @@ def test_repo_id_lookup_agrees_with_config_resolution():
         ("mlx-community/flux2-klein-base-9b-8bit", None, "flux2-klein-base-9b"),
         ("mlx-community/Z-Image-Turbo-8bit", None, "z-image-turbo"),
         ("/models/my-finetune", "schnell", "schnell"),
+        (None, "schnell", "schnell"),
     ],
 )
 def test_custom_checkpoints_step_like_the_entry_they_resolve_to(model_name, base_model, expected_key):
@@ -169,8 +171,9 @@ def test_invalid_base_model_leaves_the_default_for_the_validator_to_reject():
             "flux2-klein-9b",
         ),
         (z_image_generate, ["--model", "mlx-community/Z-Image-Turbo-8bit"], "z-image-turbo"),
+        (flux_generate, ["--base-model", "schnell"], "schnell"),
     ],
-    ids=["flux2-name", "flux2-flag", "z-image-name"],
+    ids=["flux2-name", "flux2-flag", "z-image-name", "base-only"],
 )
 def test_parser_steps_default_follows_the_custom_checkpoint(monkeypatch, module, argv, expected_key):
     monkeypatch.setattr(sys, "argv", ["prog", "--prompt", "test", *argv])
