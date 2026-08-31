@@ -88,10 +88,13 @@ def canonical_model_choices() -> tuple[str, ...]:
     return tuple(AVAILABLE_MODELS)
 
 
-def model_inference_steps(model_name: str | None) -> int:
-    # Accepts a canonical key, any alias, or a HuggingFace repo id. Unknown names —
-    # third-party checkpoints and local paths — fall back to DEFAULT_INFERENCE_STEPS, as
-    # does any registry entry with no declared count (the SeedVR2 upscalers never step).
+def model_inference_steps(model_name: str | None, base_model: str | None = None) -> int:
+    # Accepts a canonical key, any alias, or a HuggingFace repo id. A third-party checkpoint
+    # or local path takes the count of the entry it resolves to: --base-model when given,
+    # otherwise the alias in its name, the same inference the CLIs use for the geometry
+    # (#698). Only a name that says nothing about its lineage falls back to
+    # DEFAULT_INFERENCE_STEPS, as does any registry entry with no declared count (the
+    # SeedVR2 upscalers never step).
     if model_name is None:
         return DEFAULT_INFERENCE_STEPS
 
@@ -117,4 +120,12 @@ def model_inference_steps(model_name: str | None) -> int:
         if model_name == config.model_name:
             return MODEL_INFERENCE_STEPS.get(key, DEFAULT_INFERENCE_STEPS)
 
-    return DEFAULT_INFERENCE_STEPS
+    from mflux.models.common.resolution.config_resolution import ConfigResolution
+    from mflux.utils.exceptions import InvalidBaseModel, ModelConfigError
+
+    try:
+        root_key = ConfigResolution.resolve_key(model_name, base_model)
+    except (ModelConfigError, InvalidBaseModel):
+        # Nothing to infer from (or a --base-model the parser is about to reject anyway).
+        return DEFAULT_INFERENCE_STEPS
+    return MODEL_INFERENCE_STEPS.get(root_key, DEFAULT_INFERENCE_STEPS)

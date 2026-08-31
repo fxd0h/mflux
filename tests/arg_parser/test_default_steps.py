@@ -130,3 +130,49 @@ def test_repo_id_lookup_agrees_with_config_resolution():
         assert ui_defaults.model_inference_steps(repo_id) == expected, (
             f"{repo_id}: steps disagree with the resolved model {winner}"
         )
+
+
+# A custom checkpoint steps like the entry it resolves to, not like FLUX.1-dev (#698):
+# --base-model names the entry, otherwise the alias in the name does, and only a name that
+# says nothing falls back to the generic count.
+@pytest.mark.fast
+@pytest.mark.parametrize(
+    "model_name,base_model,expected_key",
+    [
+        ("mlx-community/flux2-klein-9b-8bit", None, "flux2-klein-9b"),
+        ("mlx-community/flux2-klein-9b-8bit", "flux2-klein-9b", "flux2-klein-9b"),
+        ("mlx-community/flux2-klein-9b-8bit", "flux2-klein-base-9b", "flux2-klein-base-9b"),
+        ("mlx-community/flux2-klein-base-9b-8bit", None, "flux2-klein-base-9b"),
+        ("mlx-community/Z-Image-Turbo-8bit", None, "z-image-turbo"),
+        ("/models/my-finetune", "schnell", "schnell"),
+    ],
+)
+def test_custom_checkpoints_step_like_the_entry_they_resolve_to(model_name, base_model, expected_key):
+    assert ui_defaults.model_inference_steps(model_name, base_model) == ui_defaults.MODEL_INFERENCE_STEPS[expected_key]
+
+
+@pytest.mark.fast
+def test_invalid_base_model_leaves_the_default_for_the_validator_to_reject():
+    # The parser validates --base-model after the steps default; the count must not be
+    # the thing that blows up first.
+    assert ui_defaults.model_inference_steps("/models/x", "not-a-base") == ui_defaults.DEFAULT_INFERENCE_STEPS
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(
+    "module,argv,expected_key",
+    [
+        (flux2_generate, ["--model", "mlx-community/flux2-klein-9b-8bit"], "flux2-klein-9b"),
+        (
+            flux2_generate,
+            ["--model", "mlx-community/flux2-klein-9b-8bit", "--base-model", "flux2-klein-9b"],
+            "flux2-klein-9b",
+        ),
+        (z_image_generate, ["--model", "mlx-community/Z-Image-Turbo-8bit"], "z-image-turbo"),
+    ],
+    ids=["flux2-name", "flux2-flag", "z-image-name"],
+)
+def test_parser_steps_default_follows_the_custom_checkpoint(monkeypatch, module, argv, expected_key):
+    monkeypatch.setattr(sys, "argv", ["prog", "--prompt", "test", *argv])
+    args = module.build_parser().parse_args()
+    assert args.steps == ui_defaults.MODEL_INFERENCE_STEPS[expected_key]

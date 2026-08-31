@@ -579,7 +579,7 @@ class CommandLineParser(argparse.ArgumentParser):
             # CLIs resolve that in main(), so namespace.model is still None here and a bare
             # lookup would hand every one of them FLUX.1-dev's 25 steps.
             model_name = getattr(namespace, "model", None) or self.default_model
-            namespace.steps = ui_defaults.model_inference_steps(model_name)
+            namespace.steps = ui_defaults.model_inference_steps(model_name, getattr(namespace, "base_model", None))
 
         # In-context edit: exclusivity lives in the argparse group; only the
         # "at least one" half needs a post-parse check.
