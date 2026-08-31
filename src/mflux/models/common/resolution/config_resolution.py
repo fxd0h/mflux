@@ -90,6 +90,20 @@ class ConfigResolution:
         return resolved
 
     @staticmethod
+    def infer_family_member(
+        model_path: str, registry_key: str, extra_keys: tuple[str, ...] = ()
+    ) -> "ModelConfig | None":
+        # The entry a custom checkpoint's name selects within a restricted CLI's family, or
+        # None when the name carries no family alias. resolve_restricted uses it for the
+        # geometry; the flux2 commands ask it again to learn whether the name, rather than
+        # the fallback, chose the config (a name that spells the default entry must be
+        # judged like the default entry, not like an unknown checkpoint).
+        from mflux.models.common.config.model_config import AVAILABLE_MODELS
+
+        allowed = [AVAILABLE_MODELS[registry_key]] + [AVAILABLE_MODELS[key] for key in extra_keys]
+        return ConfigResolution._infer_from_name(model_path, allowed)
+
+    @staticmethod
     def _infer_from_name(name: str, candidates: list["ModelConfig"]) -> "ModelConfig | None":
         # Shared by the INFER_SUBSTRING rule and resolve_restricted so the two cannot drift: the
         # longest matching alias wins (a "flux2-klein-base-9b" name is not claimed by "flux2-klein"),

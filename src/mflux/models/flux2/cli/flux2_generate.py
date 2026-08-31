@@ -66,10 +66,11 @@ def main():
     # checkpoint (model_path set) once --base-model declared one of the family's entries, or once its name selected
     # a sibling (a name trusted for the geometry is trusted for the distillation too; a klein-base fine-tune with a
     # misleading name declares itself with --base-model). A name that matches nothing keeps the default entry's
-    # config, whose name says nothing about the weights actually loaded, so it stays unjudged.
-    judged = (
-        args.model_path is None or args.base_model is not None or model_config is not AVAILABLE_MODELS[DEFAULT_MODEL]
-    )
+    # config, whose name says nothing about the weights actually loaded, so it stays unjudged. Asked by name rather
+    # than by comparing configs: a checkpoint spelled after the default entry resolves to that same object.
+    named = args.model_path is not None and args.base_model is None
+    named = named and ConfigResolution.infer_family_member(args.model_path, DEFAULT_MODEL, FAMILY_MODELS) is not None
+    judged = args.model_path is None or args.base_model is not None or named
     if judged and args.guidance != 1.0 and "base" not in model_config.model_name.lower():
         parser.error("--guidance is only supported for FLUX.2 base models. Use --guidance 1.0.")
 

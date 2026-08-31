@@ -310,7 +310,10 @@ class TestFlux2BaseModelPassthrough:
     def test_explicit_distilled_base_rejects_guidance(self, monkeypatch, module, base_argv):
         # Once --base-model names a distilled entry the checkpoint's lineage is known, so it must get the same guidance
         # rejection as its builtin name; before this flag existed that invocation died at model load instead of here.
-        argv = (
+        # Through the stub, so a regression ends in exit 0 rather than in a weight download.
+        exit_code = self._run_main_until_generation(
+            monkeypatch,
+            module,
             "--model",
             "mlx-community/flux2-klein-9b-8bit",
             "--base-model",
@@ -323,10 +326,7 @@ class TestFlux2BaseModelPassthrough:
             "3.0",
             *base_argv,
         )
-        monkeypatch.setattr(sys, "argv", ["prog", "--prompt", "test", *argv])
-        with pytest.raises(SystemExit) as exit_info:
-            module.main()
-        assert exit_info.value.code == 2
+        assert exit_code == 2
 
     @pytest.mark.parametrize("module,base_argv", FLUX2_BASE_ARGV, ids=lambda v: getattr(v, "__name__", v))
     def test_explicit_base_entry_keeps_guidance(self, monkeypatch, module, base_argv):
@@ -348,13 +348,19 @@ class TestFlux2BaseModelPassthrough:
         )
         assert exit_code == 0
 
+    # A name spelled after the default entry resolves to the very same object as the fallback, so the guard must
+    # ask the name, not compare configs, or a klein-4b checkpoint would slip past it.
+    @pytest.mark.parametrize("checkpoint", ["mlx-community/flux2-klein-9b-8bit", "mlx-community/flux2-klein-4b-8bit"])
     @pytest.mark.parametrize("module,base_argv", FLUX2_BASE_ARGV, ids=lambda v: getattr(v, "__name__", v))
-    def test_inferred_distilled_name_rejects_guidance(self, monkeypatch, module, base_argv):
-        # The name selected klein-9b for the geometry, so it is trusted for the distillation too (#694): the same
-        # rejection as the builtin name or the explicit flag, instead of CFG silently running on distilled weights.
-        argv = (
+    def test_inferred_distilled_name_rejects_guidance(self, monkeypatch, module, base_argv, checkpoint):
+        # The name selected a distilled entry for the geometry, so it is trusted for the distillation too (#694):
+        # the same rejection as the builtin name or the explicit flag, instead of CFG silently running on distilled
+        # weights. Through the stub, so a regression ends in exit 0 rather than in a weight download.
+        exit_code = self._run_main_until_generation(
+            monkeypatch,
+            module,
             "--model",
-            "mlx-community/flux2-klein-9b-8bit",
+            checkpoint,
             "--width",
             "512",
             "--height",
@@ -363,10 +369,7 @@ class TestFlux2BaseModelPassthrough:
             "3.0",
             *base_argv,
         )
-        monkeypatch.setattr(sys, "argv", ["prog", "--prompt", "test", *argv])
-        with pytest.raises(SystemExit) as exit_info:
-            module.main()
-        assert exit_info.value.code == 2
+        assert exit_code == 2
 
     @pytest.mark.parametrize("module,base_argv", FLUX2_BASE_ARGV, ids=lambda v: getattr(v, "__name__", v))
     def test_inferred_base_name_keeps_guidance(self, monkeypatch, module, base_argv):
