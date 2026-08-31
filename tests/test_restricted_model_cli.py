@@ -4,8 +4,9 @@
 # ernie CLIs). Each single-model CLI now routes --model through
 # ConfigResolution.resolve_restricted: builtin registry names must be an alias of the
 # CLI's own model, while paths and HuggingFace repo ids (which parse_args marks by
-# setting model_path) keep the CLI's own config and load weights from the path, as they
-# always have.
+# setting model_path) load weights from the path and take their config from the family:
+# --base-model names the entry, a family alias in the name selects it (#694), and any
+# other name keeps the CLI's own config.
 
 import sys
 from types import SimpleNamespace
@@ -183,8 +184,9 @@ FLUX2_BASE_ARGV = [
 @pytest.mark.fast
 class TestFlux2BaseModelPassthrough:
     # --base-model is parsed and validated by the general argument set, but only the flux2
-    # commands pass it to resolution. A custom checkpoint (repo id or local path) otherwise
-    # always runs on the CLI default's geometry, which corrupts any family sibling whose
+    # commands pass it to resolution. Without it a custom checkpoint (repo id or local path)
+    # runs on the sibling its name carries, or on the CLI default's geometry when it carries
+    # none; before #694 it always got the default, which corrupts any family sibling whose
     # transformer differs — a community klein-9b checkpoint reshaped as a 4B dies at its
     # first attention layer.
     @pytest.mark.parametrize("module,base_argv", FLUX2_BASE_ARGV, ids=lambda v: getattr(v, "__name__", v))
@@ -228,17 +230,63 @@ class TestFlux2BaseModelPassthrough:
             )
 
     @pytest.mark.parametrize("module,base_argv", FLUX2_BASE_ARGV, ids=lambda v: getattr(v, "__name__", v))
-    def test_custom_checkpoint_without_base_keeps_cli_config(self, monkeypatch, module, base_argv):
-        # No flag: unchanged behavior — the checkpoint runs on the CLI default's geometry.
+    def test_unrelated_checkpoint_without_base_keeps_cli_config(self, monkeypatch, module, base_argv):
+        # No flag and no family alias in the name: the checkpoint runs on the CLI default's geometry.
+        config = TestRestrictedModelConfig._resolve_via_parser(
+            monkeypatch,
+            module,
+            "flux2-klein-4b",
+            extra_argv=["--model", "/tmp/models/my-finetune-q8"],
+            extra_keys=module.FAMILY_MODELS,
+            base_argv=base_argv,
+        )
+        assert config is AVAILABLE_MODELS["flux2-klein-4b"]
+
+    # No flag, but the name carries a family alias: the sibling is inferred from it, as from_name did
+    # before #650 (#694). Longest alias wins, so "base" and "kv" names are not claimed by the plain
+    # "flux2-klein" alias of the default entry.
+    @pytest.mark.parametrize(
+        "checkpoint,expected_key",
+        [
+            ("mlx-community/flux2-klein-9b-8bit", "flux2-klein-9b"),
+            ("mlx-community/flux2-klein-base-9b-8bit", "flux2-klein-base-9b"),
+            ("/Volumes/models/flux2-klein-base-4b-q8", "flux2-klein-base-4b"),
+            ("someone/Flux2-Klein-9B-KV-4bit", "flux2-klein-9b-kv"),
+            ("mlx-community/flux2-klein-4b-8bit", "flux2-klein-4b"),
+            # The official repo ids are not builtin names either; they infer through the short aliases.
+            ("black-forest-labs/FLUX.2-klein-9B", "flux2-klein-9b"),
+            ("black-forest-labs/FLUX.2-klein-9b-kv", "flux2-klein-9b-kv"),
+            ("black-forest-labs/FLUX.2-klein-base-9B", "flux2-klein-base-9b"),
+        ],
+    )
+    @pytest.mark.parametrize("module,base_argv", FLUX2_BASE_ARGV, ids=lambda v: getattr(v, "__name__", v))
+    def test_family_alias_in_checkpoint_name_selects_sibling(
+        self, monkeypatch, module, base_argv, checkpoint, expected_key
+    ):
+        config = TestRestrictedModelConfig._resolve_via_parser(
+            monkeypatch,
+            module,
+            "flux2-klein-4b",
+            extra_argv=["--model", checkpoint],
+            extra_keys=module.FAMILY_MODELS,
+            base_argv=base_argv,
+        )
+        assert config is AVAILABLE_MODELS[expected_key]
+
+    @pytest.mark.parametrize("module,base_argv", FLUX2_BASE_ARGV, ids=lambda v: getattr(v, "__name__", v))
+    def test_explicit_base_overrides_name_inference(self, monkeypatch, module, base_argv):
+        # The flag is the explicit control: a checkpoint whose name says 9b but is declared as klein-base-9b
+        # runs as klein-base-9b.
         config = TestRestrictedModelConfig._resolve_via_parser(
             monkeypatch,
             module,
             "flux2-klein-4b",
             extra_argv=["--model", "mlx-community/flux2-klein-9b-8bit"],
             extra_keys=module.FAMILY_MODELS,
+            base_model="flux2-klein-base-9b",
             base_argv=base_argv,
         )
-        assert config is AVAILABLE_MODELS["flux2-klein-4b"]
+        assert config is AVAILABLE_MODELS["flux2-klein-base-9b"]
 
     # Runs main() until model construction and stops inside stubbed generate_image (SystemExit 0), so tests can
     # assert that argument-level validation let an invocation through without loading any weights.
@@ -301,6 +349,43 @@ class TestFlux2BaseModelPassthrough:
         assert exit_code == 0
 
     @pytest.mark.parametrize("module,base_argv", FLUX2_BASE_ARGV, ids=lambda v: getattr(v, "__name__", v))
+    def test_inferred_distilled_name_rejects_guidance(self, monkeypatch, module, base_argv):
+        # The name selected klein-9b for the geometry, so it is trusted for the distillation too (#694): the same
+        # rejection as the builtin name or the explicit flag, instead of CFG silently running on distilled weights.
+        argv = (
+            "--model",
+            "mlx-community/flux2-klein-9b-8bit",
+            "--width",
+            "512",
+            "--height",
+            "512",
+            "--guidance",
+            "3.0",
+            *base_argv,
+        )
+        monkeypatch.setattr(sys, "argv", ["prog", "--prompt", "test", *argv])
+        with pytest.raises(SystemExit) as exit_info:
+            module.main()
+        assert exit_info.value.code == 2
+
+    @pytest.mark.parametrize("module,base_argv", FLUX2_BASE_ARGV, ids=lambda v: getattr(v, "__name__", v))
+    def test_inferred_base_name_keeps_guidance(self, monkeypatch, module, base_argv):
+        exit_code = self._run_main_until_generation(
+            monkeypatch,
+            module,
+            "--model",
+            "mlx-community/flux2-klein-base-9b-8bit",
+            "--width",
+            "512",
+            "--height",
+            "512",
+            "--guidance",
+            "3.0",
+            *base_argv,
+        )
+        assert exit_code == 0
+
+    @pytest.mark.parametrize("module,base_argv", FLUX2_BASE_ARGV, ids=lambda v: getattr(v, "__name__", v))
     def test_custom_checkpoint_without_base_keeps_guidance_unjudged(self, monkeypatch, module, base_argv):
         # No --base-model: the checkpoint's lineage is unknown (it may be a klein-base fine-tune), so guidance stays unjudged.
         exit_code = self._run_main_until_generation(
@@ -317,3 +402,32 @@ class TestFlux2BaseModelPassthrough:
             *base_argv,
         )
         assert exit_code == 0
+
+
+@pytest.mark.fast
+class TestZImageFamilyInference:
+    # The z-image CLI serves z-image and its distilled sibling, so the same name inference
+    # applies (#694): a turbo-named checkpoint runs with guidance forced off instead of CFG
+    # over distilled weights. The ControlNet entry is not in this family, so its name lands
+    # on turbo, never on the ControlNet config.
+    @pytest.mark.parametrize(
+        "checkpoint,expected_key",
+        [
+            ("mlx-community/Z-Image-Turbo-8bit", "z-image-turbo"),
+            ("/models/zimage-turbo-q8", "z-image-turbo"),
+            ("Tongyi-MAI/Z-Image-Turbo", "z-image-turbo"),
+            ("/models/z-image-turbo-controlnet-q8", "z-image-turbo"),
+            ("/models/zimage-q8", "z-image"),
+            ("Tongyi-MAI/Z-Image", "z-image"),
+            ("/models/my-finetune", "z-image"),
+        ],
+    )
+    def test_family_alias_in_checkpoint_name_selects_sibling(self, monkeypatch, checkpoint, expected_key):
+        config = TestRestrictedModelConfig._resolve_via_parser(
+            monkeypatch,
+            z_image_generate,
+            "z-image",
+            ["--model", checkpoint],
+            extra_keys=z_image_generate.FAMILY_MODELS,
+        )
+        assert config is AVAILABLE_MODELS[expected_key]

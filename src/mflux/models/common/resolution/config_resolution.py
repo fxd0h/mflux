@@ -53,9 +53,12 @@ class ConfigResolution:
         # Resolve --model for a CLI hard-wired to one registry model or a closed family of them: `registry_key` is the
         # entry an omitted --model runs; `extra_keys` are siblings this CLI can equally serve. A builtin name must alias
         # one of these — anything else errors instead of silently loading a foreign config. Custom checkpoints (model_path
-        # set) keep the default entry's geometry while weights load from the path; an explicit base_model selects a family
-        # entry for them, and naming anything outside the family is an error. Compared by identity: entries can share a
-        # repo id.
+        # set) load their weights from the path and take their geometry from the family: an explicit base_model selects
+        # the entry (naming anything outside the family is an error); without it the checkpoint's name is searched for a
+        # family alias, the way from_name inferred it before #650, so mlx-community/flux2-klein-9b-8bit runs as klein-9b
+        # rather than dying inside attention on the default entry's shapes, and a turbo-named z-image checkpoint runs as
+        # z-image-turbo. Only the family is searched, so an unrelated name (~/models/my-finetune) keeps the default entry
+        # instead of being rejected. Compared by identity: entries can share a repo id.
         from mflux.models.common.config.model_config import AVAILABLE_MODELS
         from mflux.utils.exceptions import ModelConfigError
 
@@ -73,6 +76,10 @@ class ConfigResolution:
                         f"'{base_model}' is not {expected.model_name}; this CLI only accepts the aliases {aliases}."
                     )
                 return root
+            if model_path is not None:
+                inferred = ConfigResolution._infer_from_name(model_path, allowed)
+                if inferred is not None:
+                    return inferred
             return expected
         resolved = ConfigResolution.resolve(model_name=model_name)
         if all(resolved is not config for config in allowed):
@@ -81,6 +88,19 @@ class ConfigResolution:
                 f"'{model_name}' is not {expected.model_name}; this CLI only accepts the aliases {aliases}."
             )
         return resolved
+
+    @staticmethod
+    def _infer_from_name(name: str, candidates: list["ModelConfig"]) -> "ModelConfig | None":
+        # Shared by the INFER_SUBSTRING rule and resolve_restricted so the two cannot drift: the
+        # longest matching alias wins (a "flux2-klein-base-9b" name is not claimed by "flux2-klein"),
+        # then registry priority. None when no alias appears in the name.
+        lowered = name.lower()
+        matches = [
+            (config, alias) for config in candidates for alias in config.aliases if alias and alias.lower() in lowered
+        ]
+        if not matches:
+            return None
+        return sorted(matches, key=lambda match: (-len(match[1]), match[0].priority))[0][0]
 
     @staticmethod
     def _resolve(model_name: str | None, base_model: str | None = None) -> tuple["ModelConfig", "ModelConfig"]:
@@ -201,14 +221,9 @@ class ConfigResolution:
             return ConfigResolution._create_config(model_name, default_base), default_base
 
         if action == ConfigAction.INFER_SUBSTRING:
-            model_name_lower = model_name.lower()
-            matching_bases = [
-                (b, alias) for b in base_models for alias in b.aliases if alias and alias.lower() in model_name_lower
-            ]
-            if not matching_bases:
+            default_base = ConfigResolution._infer_from_name(model_name, base_models)
+            if default_base is None:
                 raise ModelConfigError(f"Cannot infer base_model from {model_name}")
-
-            default_base = sorted(matching_bases, key=lambda x: (-len(x[1]), x[0].priority))[0][0]
             return ConfigResolution._create_config(model_name, default_base), default_base
 
         if action == ConfigAction.ERROR:
