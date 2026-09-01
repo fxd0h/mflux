@@ -580,11 +580,18 @@ class CommandLineParser(argparse.ArgumentParser):
                 self.error("Either --prompt or --prompt-file argument is required, or 'prompt' required in metadata config file")
 
         if self.supports_image_generation and getattr(namespace, "steps", None) is None:
-            # Fall back to the CLI's own model when --model was omitted: most single-model
-            # CLIs resolve that in main(), so namespace.model is still None here and a bare
-            # lookup would hand every one of them FLUX.1-dev's 25 steps.
-            model_name = getattr(namespace, "model", None) or self.default_model
-            namespace.steps = ui_defaults.model_inference_steps(model_name)
+            # The chain is explicit flag -> the checkpoint's own name -> the CLI's default
+            # model -> the generic 25. Most single-model CLIs resolve --model in main(), so
+            # namespace.model is still None here; passing default_model as the FALLBACK
+            # rather than substituting it for model_name keeps --base-model's promotion
+            # alive (`--base-model flux2-klein-base-9b` with no --model runs the 50-step
+            # base, not the default entry's 4), and gives a custom checkpoint with no
+            # usable name the count of the entry the restricted CLIs actually run it on.
+            namespace.steps = ui_defaults.model_inference_steps(
+                getattr(namespace, "model", None),
+                getattr(namespace, "base_model", None),
+                fallback_model=self.default_model,
+            )
 
         # In-context edit: exclusivity lives in the argparse group; only the
         # "at least one" half needs a post-parse check.

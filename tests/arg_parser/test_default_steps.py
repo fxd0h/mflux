@@ -16,6 +16,7 @@ from mflux.models.common.config.model_config import AVAILABLE_MODELS
 from mflux.models.common.resolution.config_resolution import ConfigResolution
 from mflux.models.ernie_image.cli import ernie_image_generate, ernie_image_turbo_generate
 from mflux.models.fibo.cli import fibo_edit, fibo_generate
+from mflux.models.flux.cli import flux_generate
 from mflux.models.flux2.cli import flux2_edit_generate, flux2_generate
 from mflux.models.ideogram4.cli import ideogram4_generate
 from mflux.models.krea2.cli import krea2_generate
@@ -130,3 +131,87 @@ def test_repo_id_lookup_agrees_with_config_resolution():
         assert ui_defaults.model_inference_steps(repo_id) == expected, (
             f"{repo_id}: steps disagree with the resolved model {winner}"
         )
+
+
+# A custom checkpoint steps like the entry it resolves to, not like FLUX.1-dev (#698):
+# --base-model names the entry, otherwise the alias in the name does, and only a name that
+# says nothing falls back to the generic count.
+@pytest.mark.fast
+@pytest.mark.parametrize(
+    "model_name,base_model,expected_key",
+    [
+        ("mlx-community/flux2-klein-9b-8bit", None, "flux2-klein-9b"),
+        ("mlx-community/flux2-klein-9b-8bit", "flux2-klein-9b", "flux2-klein-9b"),
+        ("mlx-community/flux2-klein-9b-8bit", "flux2-klein-base-9b", "flux2-klein-base-9b"),
+        ("mlx-community/flux2-klein-base-9b-8bit", None, "flux2-klein-base-9b"),
+        ("mlx-community/Z-Image-Turbo-8bit", None, "z-image-turbo"),
+        ("/models/flux2-klein-9b-q8", None, "flux2-klein-9b"),
+        ("/models/my-finetune", "schnell", "schnell"),
+        (None, "schnell", "schnell"),
+        # A shared repo id as the explicit base breaks the tie the way EXPLICIT_BASE does:
+        # plain turbo (9 steps), not the ControlNet entry (8) that shares its model_name.
+        ("/models/my-finetune", "Tongyi-MAI/Z-Image-Turbo", "z-image-turbo"),
+        (None, "Tongyi-MAI/Z-Image-Turbo", "z-image-turbo"),
+    ],
+)
+def test_custom_checkpoints_step_like_the_entry_they_resolve_to(model_name, base_model, expected_key):
+    assert ui_defaults.model_inference_steps(model_name, base_model) == ui_defaults.MODEL_INFERENCE_STEPS[expected_key]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        # An alias mid-name is not a signal: a dev finetune with a schnell-ish name must
+        # not silently under-step 6x (#699 review). Ambiguity resolves to the generic
+        # count, never to a guess.
+        "mlx-community/my-schnell-style-adapter",
+        # A directory component is not the checkpoint's name.
+        "/Users/klein-9b/models/finetune",
+        # The alias must end at a word boundary.
+        "someone/schnellx-model",
+    ],
+)
+def test_alias_not_at_the_basename_start_keeps_the_default(model_name):
+    assert ui_defaults.model_inference_steps(model_name) == ui_defaults.DEFAULT_INFERENCE_STEPS
+
+
+@pytest.mark.fast
+def test_invalid_base_model_leaves_the_default_for_the_validator_to_reject():
+    # The parser validates --base-model after the steps default; the count must not be
+    # the thing that blows up first.
+    assert ui_defaults.model_inference_steps("/models/x", "not-a-base") == ui_defaults.DEFAULT_INFERENCE_STEPS
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(
+    "module,argv,expected_key",
+    [
+        (flux2_generate, ["--model", "mlx-community/flux2-klein-9b-8bit"], "flux2-klein-9b"),
+        # The flag must be able to DISAGREE with the name, or the plumbing is unpinned.
+        (
+            flux2_generate,
+            ["--model", "mlx-community/flux2-klein-9b-8bit", "--base-model", "flux2-klein-base-9b"],
+            "flux2-klein-base-9b",
+        ),
+        # Base-only on a CLI WITH a default model: the base wins over the default (the
+        # runtime builds the base entry), not the other way around.
+        (flux2_generate, ["--base-model", "flux2-klein-base-9b"], "flux2-klein-base-9b"),
+        (flux_generate, ["--base-model", "schnell"], "schnell"),
+        # No usable name: the count of the entry the restricted CLI actually runs.
+        (flux2_generate, ["--model", "/models/my-finetune"], "flux2-klein-4b"),
+        (z_image_generate, ["--model", "/models/my-finetune"], "z-image"),
+        (z_image_generate, ["--model", "mlx-community/Z-Image-Turbo-8bit"], "z-image-turbo"),
+    ],
+    ids=[
+        "flux2-name",
+        "flux2-flag-overrides-name",
+        "flux2-base-only",
+        "generic-base-only",
+        "flux2-nameless-fallback",
+        "z-image-nameless-fallback",
+        "z-image-name",
+    ],
+)
+def test_parser_steps_default_follows_the_custom_checkpoint(monkeypatch, module, argv, expected_key):
+    assert _parse(monkeypatch, module, argv).steps == ui_defaults.MODEL_INFERENCE_STEPS[expected_key]
