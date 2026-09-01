@@ -88,7 +88,7 @@ def canonical_model_choices() -> tuple[str, ...]:
     return tuple(AVAILABLE_MODELS)
 
 
-def model_inference_steps(model_name: str | None, base_model: str | None = None) -> int:
+def model_inference_steps(model_name: str | None, base_model: str | None = None, fallback_model: str | None = None) -> int:  # fmt: off
     # Accepts a canonical key, any alias, or a HuggingFace repo id. A third-party checkpoint
     # or local path takes the count of the entry it resolves to: --base-model when given,
     # otherwise the alias in its name, the same inference the CLIs use for the geometry
@@ -97,9 +97,11 @@ def model_inference_steps(model_name: str | None, base_model: str | None = None)
     # SeedVR2 upscalers never step).
     if model_name is None:
         # `--base-model schnell` with no --model asks for the base itself, the same
-        # promotion ConfigResolution makes.
+        # promotion ConfigResolution makes; without either, a CLI's own default model
+        # (fallback_model, a canonical key) is what actually runs.
         if base_model is None:
-            return DEFAULT_INFERENCE_STEPS
+            # The fallback is a builtin spelling (key or alias); resolve it like one.
+            return model_inference_steps(fallback_model) if fallback_model else DEFAULT_INFERENCE_STEPS
         model_name = base_model
 
     if model_name in MODEL_INFERENCE_STEPS:
@@ -148,6 +150,10 @@ def model_inference_steps(model_name: str | None, base_model: str | None = None)
                 if rest == "" or not rest[0].isalnum():
                     matches.append((key, alias))
     if not matches:
-        return DEFAULT_INFERENCE_STEPS
+        # No usable signal in the name: on a restricted CLI the checkpoint runs on the
+        # default entry's geometry, so its count is the honest fallback. (A name carrying
+        # a FOREIGN family's alias still wins over the fallback above; that residual is
+        # the price of the parser not knowing each CLI's family.)
+        return model_inference_steps(fallback_model) if fallback_model else DEFAULT_INFERENCE_STEPS
     key = max(matches, key=lambda match: len(match[1]))[0]  # longest alias wins, as in family inference
     return MODEL_INFERENCE_STEPS.get(key, DEFAULT_INFERENCE_STEPS)

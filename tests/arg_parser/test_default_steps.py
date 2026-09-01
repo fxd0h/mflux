@@ -184,17 +184,30 @@ def test_invalid_base_model_leaves_the_default_for_the_validator_to_reject():
     "module,argv,expected_key",
     [
         (flux2_generate, ["--model", "mlx-community/flux2-klein-9b-8bit"], "flux2-klein-9b"),
+        # The flag must be able to DISAGREE with the name, or the plumbing is unpinned.
         (
             flux2_generate,
-            ["--model", "mlx-community/flux2-klein-9b-8bit", "--base-model", "flux2-klein-9b"],
-            "flux2-klein-9b",
+            ["--model", "mlx-community/flux2-klein-9b-8bit", "--base-model", "flux2-klein-base-9b"],
+            "flux2-klein-base-9b",
         ),
-        (z_image_generate, ["--model", "mlx-community/Z-Image-Turbo-8bit"], "z-image-turbo"),
+        # Base-only on a CLI WITH a default model: the base wins over the default (the
+        # runtime builds the base entry), not the other way around.
+        (flux2_generate, ["--base-model", "flux2-klein-base-9b"], "flux2-klein-base-9b"),
         (flux_generate, ["--base-model", "schnell"], "schnell"),
+        # No usable name: the count of the entry the restricted CLI actually runs.
+        (flux2_generate, ["--model", "/models/my-finetune"], "flux2-klein-4b"),
+        (z_image_generate, ["--model", "/models/my-finetune"], "z-image"),
+        (z_image_generate, ["--model", "mlx-community/Z-Image-Turbo-8bit"], "z-image-turbo"),
     ],
-    ids=["flux2-name", "flux2-flag", "z-image-name", "base-only"],
+    ids=[
+        "flux2-name",
+        "flux2-flag-overrides-name",
+        "flux2-base-only",
+        "generic-base-only",
+        "flux2-nameless-fallback",
+        "z-image-nameless-fallback",
+        "z-image-name",
+    ],
 )
 def test_parser_steps_default_follows_the_custom_checkpoint(monkeypatch, module, argv, expected_key):
-    monkeypatch.setattr(sys, "argv", ["prog", "--prompt", "test", *argv])
-    args = module.build_parser().parse_args()
-    assert args.steps == ui_defaults.MODEL_INFERENCE_STEPS[expected_key]
+    assert _parse(monkeypatch, module, argv).steps == ui_defaults.MODEL_INFERENCE_STEPS[expected_key]
