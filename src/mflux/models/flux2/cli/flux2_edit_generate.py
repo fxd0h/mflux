@@ -76,7 +76,7 @@ def main():
     named = named and ConfigResolution.infer_family_member(args.model_path, DEFAULT_MODEL, FAMILY_MODELS) is not None
     judged = args.model_path is None or args.base_model is not None or named
     if judged and args.guidance != 1.0 and "base" not in model_config.model_name.lower():
-        parser.error("--guidance is only supported for FLUX.2 base models. Use --guidance 1.0.")
+        parser.error("--guidance is only supported for FLUX.2 base models. Use --guidance 1.0, or declare a base checkpoint with --base-model.")  # fmt: off
 
     model = Flux2KleinEdit(
         model_config=model_config,

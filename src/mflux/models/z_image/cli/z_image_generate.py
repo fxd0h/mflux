@@ -53,7 +53,11 @@ def main():
         args.scheduler = "flow_match_euler_discrete"
 
     model_config = ConfigResolution.resolve_restricted(
-        args.model, DEFAULT_MODEL, model_path=args.model_path, extra_keys=FAMILY_MODELS
+        args.model,
+        DEFAULT_MODEL,
+        model_path=args.model_path,
+        extra_keys=FAMILY_MODELS,
+        base_model=args.base_model,
     )
 
     # Warn on the EFFECTIVE behavior, not the flag value: --model may resolve to a
