@@ -145,12 +145,31 @@ def test_repo_id_lookup_agrees_with_config_resolution():
         ("mlx-community/flux2-klein-9b-8bit", "flux2-klein-base-9b", "flux2-klein-base-9b"),
         ("mlx-community/flux2-klein-base-9b-8bit", None, "flux2-klein-base-9b"),
         ("mlx-community/Z-Image-Turbo-8bit", None, "z-image-turbo"),
+        ("/models/flux2-klein-9b-q8", None, "flux2-klein-9b"),
         ("/models/my-finetune", "schnell", "schnell"),
         (None, "schnell", "schnell"),
     ],
 )
 def test_custom_checkpoints_step_like_the_entry_they_resolve_to(model_name, base_model, expected_key):
     assert ui_defaults.model_inference_steps(model_name, base_model) == ui_defaults.MODEL_INFERENCE_STEPS[expected_key]
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        # An alias mid-name is not a signal: a dev finetune with a schnell-ish name must
+        # not silently under-step 6x (#699 review). Ambiguity resolves to the generic
+        # count, never to a guess.
+        "mlx-community/my-schnell-style-adapter",
+        # A directory component is not the checkpoint's name.
+        "/Users/klein-9b/models/finetune",
+        # The alias must end at a word boundary.
+        "someone/schnellx-model",
+    ],
+)
+def test_alias_not_at_the_basename_start_keeps_the_default(model_name):
+    assert ui_defaults.model_inference_steps(model_name) == ui_defaults.DEFAULT_INFERENCE_STEPS
 
 
 @pytest.mark.fast

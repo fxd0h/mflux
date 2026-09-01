@@ -124,12 +124,30 @@ def model_inference_steps(model_name: str | None, base_model: str | None = None)
         if model_name == config.model_name:
             return MODEL_INFERENCE_STEPS.get(key, DEFAULT_INFERENCE_STEPS)
 
-    from mflux.models.common.resolution.config_resolution import ConfigResolution
-    from mflux.utils.exceptions import InvalidBaseModel, ModelConfigError
-
-    try:
-        root_key = ConfigResolution.resolve_key(model_name, base_model)
-    except (ModelConfigError, InvalidBaseModel):
-        # Nothing to infer from (or a --base-model the parser is about to reject anyway).
+    # A custom checkpoint of a known model. --base-model is the explicit signal (an
+    # invalid value keeps the default here; the parser's own validation rejects it
+    # right after this). Without it, the only accepted implicit signal is the
+    # checkpoint's basename STARTING with a full alias at a word boundary: unlike the
+    # geometry (recoverable with --base-model, and family-scoped where it is inferred),
+    # a wrong step count has no error to bounce off — a dev finetune named
+    # my-schnell-style-adapter silently under-steps 6x, which is worse than the
+    # generic 25 over-running. "klein-9b" buried mid-name or in a directory component
+    # is not a signal.
+    if base_model is not None:
+        for key, config in AVAILABLE_MODELS.items():
+            if base_model == config.model_name or base_model in config.aliases:
+                return MODEL_INFERENCE_STEPS.get(key, DEFAULT_INFERENCE_STEPS)
         return DEFAULT_INFERENCE_STEPS
-    return MODEL_INFERENCE_STEPS.get(root_key, DEFAULT_INFERENCE_STEPS)
+
+    basename = model_name.rstrip("/").rsplit("/", 1)[-1].lower()
+    matches = []
+    for key, config in AVAILABLE_MODELS.items():
+        for alias in config.aliases:
+            if alias and basename.startswith(alias.lower()):
+                rest = basename[len(alias) :]
+                if rest == "" or not rest[0].isalnum():
+                    matches.append((key, alias))
+    if not matches:
+        return DEFAULT_INFERENCE_STEPS
+    key = max(matches, key=lambda match: len(match[1]))[0]  # longest alias wins, as in family inference
+    return MODEL_INFERENCE_STEPS.get(key, DEFAULT_INFERENCE_STEPS)
