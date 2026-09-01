@@ -1,4 +1,5 @@
 import re
+import subprocess
 
 import requests
 
@@ -9,6 +10,10 @@ _FENCE = re.compile(
     r"^```release-note[ \t\r]*\n(.*?)^```[ \t\r]*$",
     re.DOTALL | re.IGNORECASE | re.MULTILINE,
 )
+
+# The squash-merge subject suffix GitHub writes: "title (#123)".
+_PR_SUFFIX = re.compile(r"\(#(\d+)\)$")
+_REVERT_TITLE = re.compile(r'^Revert "(?P<title>.+)"$')
 
 # Label -> section, first match wins in this order. PRs with no matching label land in
 # "Changed"; PRs with no release-note block land in their section flagged for the releaser.
@@ -38,34 +43,56 @@ class ReleaseNotes:
         return match.group(1).strip()
 
     @staticmethod
-    def collect_merged_prs(github_token: str, github_repo: str, since: str) -> list[dict]:
-        headers = ReleaseNotes._headers(github_token)
-        prs: list[dict] = []
-        page = 1
-        while True:
-            response = requests.get(
-                "https://api.github.com/search/issues",
-                headers=headers,
-                params={
-                    "q": f"repo:{github_repo} is:pr is:merged merged:>{since}",
-                    "per_page": 100,
-                    "page": page,
-                },
-                timeout=(5, 30),
-            )
-            if response.status_code != 200:
-                raise requests.HTTPError(
-                    f"GitHub search returned {response.status_code} collecting merged PRs: {response.text}",
-                    response=response,
-                )
-            items = response.json().get("items", [])
-            prs.extend(items)
-            if len(items) < 100:
-                return prs
-            page += 1
+    def merged_pr_numbers(previous_tag: str) -> list[int]:
+        # The release ships exactly the commits previous_tag..HEAD, so the PR set comes
+        # from those commits' squash subjects, not from a time-window search: a PR merged
+        # while the approver reviews the draft would fall out of both this release and the
+        # next one under `merged:>published_at`, and the publish-time fallback would
+        # over-include PRs that are not in the package. Commits without a (#N) suffix
+        # (direct pushes) have no PR to harvest and are skipped.
+        result = subprocess.run(
+            ["git", "log", "--format=%s", f"{previous_tag}..HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        numbers = []
+        for subject in result.stdout.splitlines():
+            match = _PR_SUFFIX.search(subject.strip())
+            if match is not None:
+                numbers.append(int(match.group(1)))
+        return list(reversed(numbers))  # git log is newest-first; harvest oldest-first
 
     @staticmethod
-    def latest_release_date(github_token: str, github_repo: str) -> str:
+    def drop_reverted_pairs(prs: list[dict]) -> list[dict]:
+        # A feature merged and reverted within the same release window is a no-op for the
+        # user; listing both lines only confuses the notes. Matched by exact title, the
+        # way GitHub writes revert PRs.
+        titles = {pr["title"]: pr["number"] for pr in prs}
+        dropped: set[int] = set()
+        for pr in prs:
+            match = _REVERT_TITLE.match(pr["title"].strip())
+            if match is not None and match.group("title") in titles:
+                dropped.add(pr["number"])
+                dropped.add(titles[match.group("title")])
+        return [pr for pr in prs if pr["number"] not in dropped]
+
+    @staticmethod
+    def fetch_pr(github_token: str, github_repo: str, number: int) -> dict:
+        response = requests.get(
+            f"https://api.github.com/repos/{github_repo}/pulls/{number}",
+            headers=ReleaseNotes._headers(github_token),
+            timeout=(5, 30),
+        )
+        if response.status_code != 200:
+            raise requests.HTTPError(
+                f"GitHub API returned {response.status_code} fetching PR #{number}: {response.text}",
+                response=response,
+            )
+        return response.json()
+
+    @staticmethod
+    def latest_release_tag(github_token: str, github_repo: str) -> str:
         response = requests.get(
             f"https://api.github.com/repos/{github_repo}/releases/latest",
             headers=ReleaseNotes._headers(github_token),
@@ -76,7 +103,7 @@ class ReleaseNotes:
                 f"GitHub API returned {response.status_code} resolving the latest release: {response.text}",
                 response=response,
             )
-        return response.json()["published_at"]
+        return response.json()["tag_name"]
 
     @staticmethod
     def render(version: str, prs: list[dict]) -> str:

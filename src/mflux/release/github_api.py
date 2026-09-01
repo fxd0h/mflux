@@ -90,21 +90,21 @@ class GitHubAPI:
             page += 1
 
     @staticmethod
-    def upsert_draft_release(
+    def create_draft_release(
         github_token: str,
         github_repo: str,
         tag_name: str,
         version: str,
         release_notes: str,
     ) -> dict:
+        # Create-only by design: the caller (draft_notes) checks for an existing release
+        # first and never overwrites a draft, because the draft is the approver's edited
+        # working copy.
         headers = {
             "Authorization": f"token {github_token}",
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "MFLUX-Release-Script",
         }
-        existing = GitHubAPI.find_release(github_token, github_repo, tag_name)
-        if existing is not None and not existing.get("draft", False):
-            raise ValueError(f"Release {tag_name} is already published; refusing to overwrite its notes")
         data = {
             "tag_name": tag_name,
             "name": f"Release {version}",
@@ -112,14 +112,9 @@ class GitHubAPI:
             "draft": True,
             "prerelease": False,
         }
-        if existing is None:
-            response = requests.post(f"https://api.github.com/repos/{github_repo}/releases", json=data, headers=headers, timeout=(5, 30))  # fmt: off
-            expected = 201
-        else:
-            response = requests.patch(existing["url"], json=data, headers=headers, timeout=(5, 30))
-            expected = 200
-        if response.status_code != expected:
-            raise Exception(f"Failed to upsert draft release: {response.status_code} - {response.text}")
+        response = requests.post(f"https://api.github.com/repos/{github_repo}/releases", json=data, headers=headers, timeout=(5, 30))  # fmt: off
+        if response.status_code != 201:
+            raise Exception(f"Failed to create draft release: {response.status_code} - {response.text}")
         print(f"\U0001f4dd Draft release ready for {tag_name}: {response.json().get('html_url')}")
         return response.json()
 

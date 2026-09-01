@@ -14,11 +14,12 @@
 ## Release note
 
 ```release-note
-none
 ```
 
 <!-- One or two user-facing sentences describing the change, harvested into the release
-     notes at release time. Leave `none` for changes users never see (CI, tests, docs). -->
+     notes at release time. Write exactly `none` for changes users never see (CI, tests,
+     docs). The block starts empty on purpose: CI fails until you make that call, so an
+     untouched template cannot silently drop a user-facing change from the notes. -->
 
 ## Verification
 

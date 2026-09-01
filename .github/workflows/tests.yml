@@ -14,30 +14,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Every PR must carry a fenced release-note block (or an explicit `none`) in its body;
-  # the release draft is harvested from those blocks (#673). The body comes from the event
-  # payload file, never template-expanded into the script.
-  release-note:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions: {}
-    steps:
-      - name: Require a complete release-note block in the PR body
-        # Mirrors ReleaseNotes._FENCE exactly (keep the two in sync): an opening fence
-        # without a closing fence, or an empty block, would pass a looser check here and
-        # then land in the draft as [needs edit].
-        run: |
-          python3 - <<'PY'
-          import json, os, re, sys
-          event = json.load(open(os.environ["GITHUB_EVENT_PATH"]))
-          body = (event.get("pull_request") or {}).get("body") or ""
-          match = re.search(r"^```release-note[ \t\r]*\n(.*?)^```[ \t\r]*$", body, re.DOTALL | re.IGNORECASE | re.MULTILINE)
-          if match is None or not match.group(1).strip():
-              print("::error::Add a complete ```release-note fenced block to the PR body (write none inside it for changes users never see).")
-              sys.exit(1)
-          print("release-note block found")
-          PY
-
+  # The release-note block check lives in .github/workflows/release-note.yml: it must
+  # also trigger on `edited` (fixing the block means editing the PR body), which this
+  # workflow's push/PR triggers do not cover.
   lint:
     runs-on: ubuntu-latest
 

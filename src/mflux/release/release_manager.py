@@ -19,7 +19,7 @@ class ReleaseManager:
         package_name: str = "mflux",
         trusted_publishing: bool = False,
     ) -> None:
-        github_repo = github_repo or os.getenv("GITHUB_REPOSITORY", "filipstrand/mflux")
+        github_repo = github_repo or os.getenv("GITHUB_REPOSITORY", "mflux-community/mflux")
         # 0. Load version from pyproject.toml
         version = VersionUtil.get_mflux_version()
         tag_name = f"v.{version}"
@@ -73,14 +73,30 @@ class ReleaseManager:
         github_repo = github_repo or os.getenv("GITHUB_REPOSITORY", "mflux-community/mflux")
         version = VersionUtil.get_mflux_version()
         tag_name = f"v.{version}"
+        # Never overwrite: the draft is the approver's working copy (they edit it before the
+        # gated job publishes it verbatim), so a re-dispatch must not clobber those edits.
+        # Re-harvesting requires deleting the draft first. A published release is the
+        # documented re-dispatch no-op, not an error.
+        existing = GitHubAPI.find_release(github_token, github_repo, tag_name)
+        if existing is not None:
+            if existing.get("draft", False):
+                print(f"\U0001f4dd Draft for {tag_name} already exists; leaving the approver's copy untouched")
+            else:
+                print(f"✅ Release {tag_name} is already published; nothing to draft")
+            return
         notes = ReleaseManager._harvest_notes(github_token, github_repo, version)
-        GitHubAPI.upsert_draft_release(github_token, github_repo, tag_name, version, notes)
+        GitHubAPI.create_draft_release(github_token, github_repo, tag_name, version, notes)
 
     @staticmethod
     def _harvest_notes(github_token: str, github_repo: str, version: str) -> str:
-        since = ReleaseNotes.latest_release_date(github_token, github_repo)
-        prs = ReleaseNotes.collect_merged_prs(github_token, github_repo, since)
-        print(f"\U0001f4e5 Harvested {len(prs)} merged PRs since {since}")
+        # Keyed on commits, not timestamps: the notes must list exactly the PRs whose
+        # squash commits are in previous_tag..HEAD, whether this runs at dispatch time
+        # (draft-notes job) or as the publish-time fallback.
+        previous_tag = ReleaseNotes.latest_release_tag(github_token, github_repo)
+        numbers = ReleaseNotes.merged_pr_numbers(previous_tag)
+        prs = [ReleaseNotes.fetch_pr(github_token, github_repo, number) for number in numbers]
+        prs = ReleaseNotes.drop_reverted_pairs(prs)
+        print(f"\U0001f4e5 Harvested {len(prs)} merged PRs in {previous_tag}..HEAD")
         return ReleaseNotes.render(version, prs)
 
     @staticmethod

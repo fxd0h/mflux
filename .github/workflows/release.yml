@@ -18,8 +18,20 @@ jobs:
       contents: write
       pull-requests: read
     steps:
+      - name: Validate branch
+        # Same guard as the gated job below, fail-fast here too: this job harvests from
+        # the dispatched ref's history. $GITHUB_REF is the runner-provided env var, never
+        # template-expanded into shell source (#646 review, #648).
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "❌ Releases may only be drafted from main (got $GITHUB_REF)"
+            exit 1
+          fi
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0 # the harvest walks previous_tag..HEAD
 
       - name: Install uv and Python
         uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d  # v10.0.0
@@ -31,13 +43,17 @@ jobs:
       - name: Install dependencies
         run: |
           uv pip install -e . --no-deps
+          # ^ project only, no deps: same rationale as the release job below — the
+          #   script never imports the multi-GB torch/mlx chain a full sync pulls.
           uv pip install toml requests
 
       - name: Fill the draft release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          uv run python -m mflux.release.release_script --draft-notes
+          # python -m, not `uv run`: a bare uv run would sync the full lock into the
+          # venv first, undoing the minimal install above. setup-uv already activated it.
+          python -m mflux.release.release_script --draft-notes
 
   release:
     needs: draft-notes
