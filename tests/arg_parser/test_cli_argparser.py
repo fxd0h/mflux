@@ -300,7 +300,7 @@ def test_builtin_sidecar_replays_without_base_model(
     # A run with a builtin model has no base: the sidecar stores null (and, before #695,
     # the literal string "None"). Neither may reach the --base-model validator, which
     # rejected every such replay with "invalid choice: 'None'".
-    metadata_file = temp_dir / f"builtin-{stored}.json"
+    metadata_file = temp_dir / f"builtin-{'null' if stored is None else 'legacy'}.json"
     with metadata_file.open("wt") as m:
         base_metadata_dict["model"] = "dev"
         base_metadata_dict["base_model"] = stored
