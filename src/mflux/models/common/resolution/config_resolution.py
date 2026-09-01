@@ -77,7 +77,7 @@ class ConfigResolution:
                     )
                 return root
             if model_path is not None:
-                inferred = ConfigResolution._infer_from_name(model_path, allowed)
+                inferred = ConfigResolution.infer_family_member(model_path, registry_key, extra_keys)
                 if inferred is not None:
                     return inferred
             return expected
@@ -98,10 +98,19 @@ class ConfigResolution:
         # geometry; the flux2 commands ask it again to learn whether the name, rather than
         # the fallback, chose the config (a name that spells the default entry must be
         # judged like the default entry, not like an unknown checkpoint).
+        #
+        # An exact repo id wins outright; otherwise only the checkpoint's BASENAME is
+        # searched (#701): the basename is the only path segment that names the checkpoint,
+        # and a parent directory that happens to name a sibling
+        # (/Volumes/flux2-klein-9b-experiments/my-4b-finetune) must not reshape it.
         from mflux.models.common.config.model_config import AVAILABLE_MODELS
 
         allowed = [AVAILABLE_MODELS[registry_key]] + [AVAILABLE_MODELS[key] for key in extra_keys]
-        return ConfigResolution._infer_from_name(model_path, allowed)
+        exact = next((config for config in allowed if model_path == config.model_name), None)
+        if exact is not None:
+            return exact
+        basename = model_path.rstrip("/").rsplit("/", 1)[-1]
+        return ConfigResolution._infer_from_name(basename, allowed)
 
     @staticmethod
     def _infer_from_name(name: str, candidates: list["ModelConfig"]) -> "ModelConfig | None":

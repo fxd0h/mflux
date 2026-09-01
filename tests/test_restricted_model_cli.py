@@ -434,3 +434,76 @@ class TestZImageFamilyInference:
             extra_keys=z_image_generate.FAMILY_MODELS,
         )
         assert config is AVAILABLE_MODELS[expected_key]
+
+
+@pytest.mark.fast
+class TestFamilyInferenceHardening:
+    # #701: the basename is the only path segment that names the checkpoint. A parent
+    # directory naming a sibling must not reshape it, and the z-image CLI's --base-model
+    # must actually reach resolution.
+    @pytest.mark.parametrize("module,base_argv", FLUX2_BASE_ARGV, ids=lambda v: getattr(v, "__name__", v))
+    def test_parent_directory_alias_is_not_a_signal(self, monkeypatch, module, base_argv):
+        config = TestRestrictedModelConfig._resolve_via_parser(
+            monkeypatch,
+            module,
+            "flux2-klein-4b",
+            extra_argv=["--model", "/Volumes/flux2-klein-9b-experiments/my-4b-finetune"],
+            extra_keys=module.FAMILY_MODELS,
+            base_argv=base_argv,
+        )
+        assert config is AVAILABLE_MODELS["flux2-klein-4b"]
+
+    def test_z_image_base_model_overrides_the_name(self, monkeypatch):
+        # The turbo-named checkpoint is declared as the CFG-capable base entry: the flag
+        # must win over the name, which requires the CLI to pass it through (#701).
+        config = TestRestrictedModelConfig._resolve_via_parser(
+            monkeypatch,
+            z_image_generate,
+            "z-image",
+            ["--model", "mlx-community/Z-Image-Turbo-8bit"],
+            extra_keys=z_image_generate.FAMILY_MODELS,
+            base_model="z-image",
+        )
+        assert config is AVAILABLE_MODELS["z-image"]
+
+    def test_z_image_foreign_base_rejected(self, monkeypatch):
+        with pytest.raises(ModelConfigError, match="only accepts the aliases"):
+            TestRestrictedModelConfig._resolve_via_parser(
+                monkeypatch,
+                z_image_generate,
+                "z-image",
+                ["--model", "/models/finetune"],
+                extra_keys=z_image_generate.FAMILY_MODELS,
+                base_model="dev",
+            )
+
+    def test_z_image_parent_directory_alias_is_not_a_signal(self, monkeypatch):
+        config = TestRestrictedModelConfig._resolve_via_parser(
+            monkeypatch,
+            z_image_generate,
+            "z-image",
+            ["--model", "/models/z-image-turbo-stuff/finetune"],
+            extra_keys=z_image_generate.FAMILY_MODELS,
+        )
+        assert config is AVAILABLE_MODELS["z-image"]
+
+    def test_official_repo_id_still_selects_its_entry(self, monkeypatch):
+        # The exact repo id contains slashes, so it must match before the basename search.
+        config = TestRestrictedModelConfig._resolve_via_parser(
+            monkeypatch,
+            flux2_generate,
+            "flux2-klein-4b",
+            ["--model", "black-forest-labs/FLUX.2-klein-9B"],
+            extra_keys=flux2_generate.FAMILY_MODELS,
+        )
+        assert config is AVAILABLE_MODELS["flux2-klein-9b"]
+
+    def test_guidance_rejection_names_the_escape_hatch(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit):
+            monkeypatch.setattr(
+                sys,
+                "argv",
+                ["prog", "--prompt", "t", "--model", "mlx-community/flux2-klein-9b-8bit", "--guidance", "3.0"],
+            )
+            flux2_generate.main()
+        assert "--base-model" in capsys.readouterr().err

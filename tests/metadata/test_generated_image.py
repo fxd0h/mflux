@@ -272,3 +272,31 @@ def test_fibo_edit_prompt_json_tracks_final_output_name_when_image_exists(tmp_pa
     assert final_prompt_path.exists()
     assert not (tmp_path / "fibo_edit_output.json").exists()
     assert json.loads(final_prompt_path.read_text()) == json.loads(prompt)
+
+
+def test_custom_checkpoint_stores_the_base_it_resolved_to(tmp_path):
+    # The other half of the #695 fix, previously unpinned: a custom checkpoint declared
+    # with --base-model stores that base, and the stored value is one the --base-model
+    # validator accepts on replay.
+    from mflux.models.common.resolution.config_resolution import ConfigResolution
+
+    output_path = tmp_path / "generated.png"
+    generated_image = GeneratedImage(
+        image=Image.new("RGB", (16, 16), "white"),
+        model_config=ModelConfig.from_name("some-org/dev-finetune", base_model="dev"),
+        seed=42,
+        prompt="test prompt",
+        steps=20,
+        guidance=3.5,
+        precision=mx.bfloat16,
+        quantization=8,
+        generation_time=1.23,
+        height=16,
+        width=16,
+    )
+
+    generated_image.save(path=output_path, overwrite=True, export_json_metadata=True)
+
+    stored = json.loads(output_path.with_suffix(".metadata.json").read_text())
+    assert stored["base_model"] == "black-forest-labs/FLUX.1-dev"
+    assert stored["base_model"] in ConfigResolution.base_model_names()
