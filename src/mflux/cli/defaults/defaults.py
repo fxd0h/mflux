@@ -95,52 +95,58 @@ def model_inference_steps(model_name: str | None, base_model: str | None = None,
     # (#698). Only a name that says nothing about its lineage falls back to
     # DEFAULT_INFERENCE_STEPS, as does any registry entry with no declared count (the
     # SeedVR2 upscalers never step).
-    if model_name is None:
-        # `--base-model schnell` with no --model asks for the base itself, the same
-        # promotion ConfigResolution makes; without either, a CLI's own default model
-        # (fallback_model, a canonical key) is what actually runs.
-        if base_model is None:
-            # The fallback is a builtin spelling (key or alias); resolve it like one.
-            return model_inference_steps(fallback_model) if fallback_model else DEFAULT_INFERENCE_STEPS
-        model_name = base_model
-
-    if model_name in MODEL_INFERENCE_STEPS:
-        return MODEL_INFERENCE_STEPS[model_name]
+    if model_name is None and base_model is None:
+        # Neither named: a CLI's own default model (fallback_model, a builtin spelling,
+        # so resolved like one) is what actually runs.
+        return model_inference_steps(fallback_model) if fallback_model else DEFAULT_INFERENCE_STEPS
 
     # Imported lazily: model_config pulls in mlx, and weight_loader / lora_resolution
     # already import this module, so a module-level import would close a cycle.
     from mflux.models.common.config.model_config import AVAILABLE_MODELS
 
-    # Aliases are unique across the registry, so match them before repo ids.
-    for key, config in AVAILABLE_MODELS.items():
-        if model_name in config.aliases:
-            return MODEL_INFERENCE_STEPS.get(key, DEFAULT_INFERENCE_STEPS)
+    if model_name is not None:
+        if model_name in MODEL_INFERENCE_STEPS:
+            return MODEL_INFERENCE_STEPS[model_name]
 
-    # Several entries share one repo id (z-image-turbo and its ControlNet, the FLUX.1-dev
-    # ControlNets). Break the tie the same way ConfigResolution's exact-match rule does —
-    # base variant first, then priority — so the step count matches the config that
-    # actually gets built.
-    for key, config in sorted(
-        AVAILABLE_MODELS.items(), key=lambda kv: (kv[1].controlnet_model is not None, kv[1].priority)
-    ):
-        if model_name == config.model_name:
-            return MODEL_INFERENCE_STEPS.get(key, DEFAULT_INFERENCE_STEPS)
-
-    # A custom checkpoint of a known model. --base-model is the explicit signal (an
-    # invalid value keeps the default here; the parser's own validation rejects it
-    # right after this). Without it, the only accepted implicit signal is the
-    # checkpoint's basename STARTING with a full alias at a word boundary: unlike the
-    # geometry (recoverable with --base-model, and family-scoped where it is inferred),
-    # a wrong step count has no error to bounce off — a dev finetune named
-    # my-schnell-style-adapter silently under-steps 6x, which is worse than the
-    # generic 25 over-running. "klein-9b" buried mid-name or in a directory component
-    # is not a signal.
-    if base_model is not None:
+        # Aliases are unique across the registry, so match them before repo ids.
         for key, config in AVAILABLE_MODELS.items():
-            if base_model == config.model_name or base_model in config.aliases:
+            if model_name in config.aliases:
                 return MODEL_INFERENCE_STEPS.get(key, DEFAULT_INFERENCE_STEPS)
-        return DEFAULT_INFERENCE_STEPS
 
+        # Several entries share one repo id (z-image-turbo and its ControlNet, the FLUX.1-dev
+        # ControlNets). Break the tie the same way ConfigResolution's exact-match rule does —
+        # base variant first, then priority — so the step count matches the config that
+        # actually gets built.
+        for key, config in sorted(
+            AVAILABLE_MODELS.items(), key=lambda kv: (kv[1].controlnet_model is not None, kv[1].priority)
+        ):
+            if model_name == config.model_name:
+                return MODEL_INFERENCE_STEPS.get(key, DEFAULT_INFERENCE_STEPS)
+
+    # An explicit --base-model — alone (asking for the base itself) or beside a custom
+    # checkpoint — is answered by the resolver that builds the runtime config, not by
+    # another matching loop: EXPLICIT_BASE already breaks the shared-repo-id tie
+    # (Tongyi-MAI/Z-Image-Turbo is plain turbo, 9 steps, not its ControlNet's 8) and
+    # already knows every accepted spelling.
+    if base_model is not None:
+        from mflux.models.common.resolution.config_resolution import ConfigResolution
+        from mflux.utils.exceptions import InvalidBaseModel
+
+        try:
+            key = ConfigResolution.resolve_key(model_name=None, base_model=base_model)
+        except InvalidBaseModel:
+            # An invalid value keeps the default; the parser's own validation rejects
+            # it right after this.
+            return DEFAULT_INFERENCE_STEPS
+        return MODEL_INFERENCE_STEPS.get(key, DEFAULT_INFERENCE_STEPS)
+
+    # A custom checkpoint of a known model, with no explicit signal. The only accepted
+    # implicit signal is the checkpoint's basename STARTING with a full alias at a word
+    # boundary: unlike the geometry (recoverable with --base-model, and family-scoped
+    # where it is inferred), a wrong step count has no error to bounce off — a dev
+    # finetune named my-schnell-style-adapter silently under-steps 6x, which is worse
+    # than the generic 25 over-running. "klein-9b" buried mid-name or in a directory
+    # component is not a signal.
     basename = model_name.rstrip("/").rsplit("/", 1)[-1].lower()
     matches = []
     for key, config in AVAILABLE_MODELS.items():

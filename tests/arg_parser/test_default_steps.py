@@ -148,6 +148,10 @@ def test_repo_id_lookup_agrees_with_config_resolution():
         ("/models/flux2-klein-9b-q8", None, "flux2-klein-9b"),
         ("/models/my-finetune", "schnell", "schnell"),
         (None, "schnell", "schnell"),
+        # A shared repo id as the explicit base breaks the tie the way EXPLICIT_BASE does:
+        # plain turbo (9 steps), not the ControlNet entry (8) that shares its model_name.
+        ("/models/my-finetune", "Tongyi-MAI/Z-Image-Turbo", "z-image-turbo"),
+        (None, "Tongyi-MAI/Z-Image-Turbo", "z-image-turbo"),
     ],
 )
 def test_custom_checkpoints_step_like_the_entry_they_resolve_to(model_name, base_model, expected_key):
