@@ -293,6 +293,25 @@ def test_base_model_arg_in_file(mflux_generate_parser, mflux_generate_minimal_ar
 
 
 @pytest.mark.fast
+@pytest.mark.parametrize("stored", [None, "None"], ids=["null", "legacy-string"])
+def test_builtin_sidecar_replays_without_base_model(
+    mflux_generate_parser, mflux_generate_minimal_argv, base_metadata_dict, temp_dir, stored
+):
+    # A run with a builtin model has no base: the sidecar stores null (and, before #695,
+    # the literal string "None"). Neither may reach the --base-model validator, which
+    # rejected every such replay with "invalid choice: 'None'".
+    metadata_file = temp_dir / f"builtin-{'null' if stored is None else 'legacy'}.json"
+    with metadata_file.open("wt") as m:
+        base_metadata_dict["model"] = "dev"
+        base_metadata_dict["base_model"] = stored
+        json.dump(base_metadata_dict, m, indent=4)
+    with patch('sys.argv', mflux_generate_minimal_argv + ['--config-from-metadata', metadata_file.as_posix()]):  # fmt: off
+        args = mflux_generate_parser.parse_args()
+        assert args.model == "dev"
+        assert args.base_model is None
+
+
+@pytest.mark.fast
 def test_prompt_arg(mflux_generate_parser, mflux_generate_minimal_argv, base_metadata_dict, temp_dir):
     metadata_file = temp_dir / "prompt.json"
     file_prompt = "origin of the universe"
