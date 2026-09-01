@@ -1,6 +1,6 @@
 ---
 name: mflux-release
-description: Prepare a release in mflux (version bump + uv lock; release notes are harvested from PR release-note blocks, CHANGELOG.md is not hand-edited). Use when preparing a release branch or release PR.
+description: Prepare a release in mflux (version bump + uv lock; release notes are harvested from PR release-note blocks and live in GitHub Releases). Use when preparing a release branch or release PR.
 ---
 # mflux release prep
 
@@ -18,7 +18,7 @@ Releases are prepared in-repo; tagging/publishing is handled by GitHub Actions
   `[needs edit]` lines, adding contributor thanks if wanted); the gated job publishes
   it exactly as edited. A re-dispatch never overwrites an existing draft; delete the
   draft to re-harvest.
-- Do NOT hand-edit `CHANGELOG.md`: the tooling no longer reads it.
+- There is no `CHANGELOG.md`: the notes live in GitHub Releases (https://github.com/mflux-community/mflux/releases).
 
 ## Release-prep PR checklist
 
