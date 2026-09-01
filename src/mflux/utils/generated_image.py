@@ -221,7 +221,10 @@ class GeneratedImage:
         metadata = {
             "mflux_version": VersionUtil.get_mflux_version(),
             "model": self.model_config.model_name,
-            "base_model": str(self.model_config.base_model),
+            # The value itself, not str() of it: a builtin run has no base and must store null,
+            # because --config-from-metadata hands this back to the --base-model validator and
+            # the string "None" is not a name (#695).
+            "base_model": self.model_config.base_model,
             "seed": self.seed,
             "steps": self.steps,
             "guidance": self.guidance if self.model_config.supports_guidance else None,

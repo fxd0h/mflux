@@ -2,10 +2,10 @@ import os
 
 import requests
 
-from mflux.release.changelog_parser import ChangelogParser
 from mflux.release.git_operations import GitOperations
 from mflux.release.github_api import GitHubAPI
 from mflux.release.pypi_publisher import PyPIPublisher
+from mflux.release.release_notes import ReleaseNotes
 from mflux.release.release_validator import ReleaseValidator
 from mflux.utils.version_util import VersionUtil
 
@@ -19,7 +19,7 @@ class ReleaseManager:
         package_name: str = "mflux",
         trusted_publishing: bool = False,
     ) -> None:
-        github_repo = github_repo or os.getenv("GITHUB_REPOSITORY", "filipstrand/mflux")
+        github_repo = github_repo or os.getenv("GITHUB_REPOSITORY", "mflux-community/mflux")
         # 0. Load version from pyproject.toml
         version = VersionUtil.get_mflux_version()
         tag_name = f"v.{version}"
@@ -55,12 +55,49 @@ class ReleaseManager:
         if not git_tag_exists:
             GitOperations.create_and_push_tag(tag_name, version)
 
-        # 6. Create GitHub release if needed
+        # 6. Publish the reviewed draft release (created by the draft-notes job, and
+        # possibly edited by whoever approved the pypi deployment). A missing draft
+        # falls back to harvesting fresh notes so a manual run still completes.
         if not github_release_exists:
-            release_notes = ChangelogParser.extract_release_notes_from_changelog(version)
-            GitHubAPI.create_github_release(github_token, github_repo, tag_name, version, release_notes)
+            draft = GitHubAPI.find_release(github_token, github_repo, tag_name)
+            if draft is not None and draft.get("draft", False):
+                GitHubAPI.publish_draft_release(github_token, github_repo, draft)
+            else:
+                release_notes = ReleaseManager._harvest_notes(github_token, github_repo, version)
+                GitHubAPI.create_github_release(github_token, github_repo, tag_name, version, release_notes)
 
         print(f"🎉 Release process completed successfully for version {version}!")
+
+    @staticmethod
+    def draft_notes(github_token: str, github_repo: str | None = None) -> None:
+        github_repo = github_repo or os.getenv("GITHUB_REPOSITORY", "mflux-community/mflux")
+        version = VersionUtil.get_mflux_version()
+        tag_name = f"v.{version}"
+        # Never overwrite: the draft is the approver's working copy (they edit it before the
+        # gated job publishes it verbatim), so a re-dispatch must not clobber those edits.
+        # Re-harvesting requires deleting the draft first. A published release is the
+        # documented re-dispatch no-op, not an error.
+        existing = GitHubAPI.find_release(github_token, github_repo, tag_name)
+        if existing is not None:
+            if existing.get("draft", False):
+                print(f"\U0001f4dd Draft for {tag_name} already exists; leaving the approver's copy untouched")
+            else:
+                print(f"✅ Release {tag_name} is already published; nothing to draft")
+            return
+        notes = ReleaseManager._harvest_notes(github_token, github_repo, version)
+        GitHubAPI.create_draft_release(github_token, github_repo, tag_name, version, notes)
+
+    @staticmethod
+    def _harvest_notes(github_token: str, github_repo: str, version: str) -> str:
+        # Keyed on commits, not timestamps: the notes must list exactly the PRs whose
+        # squash commits are in previous_tag..HEAD, whether this runs at dispatch time
+        # (draft-notes job) or as the publish-time fallback.
+        previous_tag = ReleaseNotes.latest_release_tag(github_token, github_repo)
+        numbers = ReleaseNotes.merged_pr_numbers(previous_tag)
+        prs = [ReleaseNotes.fetch_pr(github_token, github_repo, number) for number in numbers]
+        prs = ReleaseNotes.drop_reverted_pairs(prs)
+        print(f"\U0001f4e5 Harvested {len(prs)} merged PRs in {previous_tag}..HEAD")
+        return ReleaseNotes.render(version, prs)
 
     @staticmethod
     def _is_release_complete(git_tag_exists: bool, github_release_exists: bool) -> bool:

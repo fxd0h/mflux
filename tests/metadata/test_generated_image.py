@@ -62,6 +62,32 @@ def test_exported_metadata_uses_metadata_sidecar_suffix(tmp_path):
     assert json.loads(metadata_path.read_text())["seed"] == 42
 
 
+def test_builtin_run_stores_null_base_model(tmp_path):
+    # str(None) used to land here as the string "None", which --config-from-metadata then
+    # fed to the --base-model validator (#695). A builtin run stores null; a custom
+    # checkpoint stores the base it resolved to, which the validator accepts.
+    output_path = tmp_path / "generated.png"
+    generated_image = GeneratedImage(
+        image=Image.new("RGB", (16, 16), "white"),
+        model_config=ModelConfig.dev(),
+        seed=42,
+        prompt="test prompt",
+        steps=20,
+        guidance=3.5,
+        precision=mx.bfloat16,
+        quantization=8,
+        generation_time=1.23,
+        height=16,
+        width=16,
+    )
+
+    generated_image.save(path=output_path, overwrite=True, export_json_metadata=True)
+
+    stored = json.loads(output_path.with_suffix(".metadata.json").read_text())
+    assert stored["base_model"] is None
+    assert stored["model"] == ModelConfig.dev().model_name
+
+
 def test_pid_decode_and_resize_round_trip_through_metadata(tmp_path):
     output_path = tmp_path / "pid_output.png"
     generated_image = GeneratedImage(

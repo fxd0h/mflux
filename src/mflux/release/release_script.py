@@ -12,6 +12,11 @@ def main():
     parser.add_argument("--github-token", help="GitHub token")
     parser.add_argument("--pypi-token", help="PyPI API token")
     parser.add_argument(
+        "--draft-notes",
+        action="store_true",
+        help="Harvest release-note blocks from merged PRs and create/update the draft GitHub release, then exit",
+    )
+    parser.add_argument(
         "--trusted-publishing",
         action="store_true",
         help="Build distributions but defer PyPI upload to a trusted publisher (e.g. GitHub Actions OIDC)",
@@ -25,6 +30,9 @@ def main():
     }
 
     try:
+        if args.draft_notes:
+            ReleaseManager.draft_notes(github_token=args.github_token or os.getenv("GITHUB_TOKEN"))
+            return
         ReleaseManager.create_release(
             github_token=args.github_token or os.getenv("GITHUB_TOKEN"),
             pypi_token=args.pypi_token or os.getenv("PYPI_API_TOKEN"),

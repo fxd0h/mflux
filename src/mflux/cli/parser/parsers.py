@@ -423,7 +423,12 @@ class CommandLineParser(argparse.ArgumentParser):
                 namespace.model = prior_gen_metadata.get("model", namespace.model)
 
             if namespace.base_model is None:
-                namespace.base_model = prior_gen_metadata.get("base_model", None)
+                # Sidecars written before #695 store the literal string "None" for a builtin
+                # run; it means the same as the null they store now, and handing it to the
+                # --base-model validator below would reject the replay.
+                restored_base_model = prior_gen_metadata.get("base_model", None)
+                if restored_base_model not in (None, "None"):
+                    namespace.base_model = restored_base_model
 
             if namespace.prompt is None:
                 namespace.prompt = prior_gen_metadata.get("prompt", None)

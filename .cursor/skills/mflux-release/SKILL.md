@@ -1,40 +1,30 @@
 ---
 name: mflux-release
-description: Prepare a release in mflux (version bump, changelog, contributors, uv lock) without tagging/publishing. Use when preparing a release branch or release PR.
+description: Prepare a release in mflux (version bump + uv lock; release notes are harvested from PR release-note blocks, CHANGELOG.md is not hand-edited). Use when preparing a release branch or release PR.
 ---
 # mflux release prep
 
-Releases are prepared in-repo; tagging/publishing is handled by GitHub Actions.
+Releases are prepared in-repo; tagging/publishing is handled by GitHub Actions
+(`release.yml`, dispatched from main with the `publish` confirmation).
 
-## When to Use
+## How notes work now (#685)
 
-- You’re preparing a release PR.
-- You need to bump version and update the changelog/lockfile correctly.
+- Every PR carries a fenced ` ```release-note ` block in its body (CI enforces it;
+  `none` opts a PR out). That block is the only source of release notes.
+- On dispatch, the ungated `draft-notes` job harvests the blocks for every PR whose
+  squash commit is in `previous-tag..HEAD` and fills a DRAFT GitHub release, grouped
+  by label.
+- Whoever approves the `pypi` deployment reads and edits that draft (fixing any
+  `[needs edit]` lines, adding contributor thanks if wanted); the gated job publishes
+  it exactly as edited. A re-dispatch never overwrites an existing draft; delete the
+  draft to re-harvest.
+- Do NOT hand-edit `CHANGELOG.md`: the tooling no longer reads it.
 
-## Instructions
+## Release-prep PR checklist
 
-- Checklist:
-  - Bump version in `pyproject.toml`
-  - Review commits since last release tag:
-    - `git log --oneline v.<last-version>..HEAD`
-  - Browse relevant file contents if needed to clarify changes
-  - Weigh commit impact: some are minor; skim earlier changelog entries to gauge what's worth reporting vs tiny fixes
-  - Add a descriptive entry to `CHANGELOG.md` based on those commits
-  - Always add a `### 👩‍💻 Contributors` section to the new changelog entry
-  - Source contributor names from merged GitHub PR authors for the changes included in the release, and format them as `@handle`
-  - Prefer one release commit for the release prep work on the branch
-  - Name that commit `Release <version>`
-  - Prefer GitHub data over local git author names:
-    - Use `gh pr list --state merged` / related `gh` queries when available
-    - Do not assume `gh` is installed; if it is unavailable, inspect GitHub on the web instead
-    - General pages to check on the web:
-      - Closed PRs: `https://github.com/<owner>/<repo>/pulls?q=is%3Apr+is%3Aclosed`
-      - Compare view for release range: `https://github.com/<owner>/<repo>/compare/v.<last-version>...HEAD`
-      - Specific PR page when you know the PR number: `https://github.com/<owner>/<repo>/pull/<number>`
-    - Map included changes to merged PR authors from those pages
-  - Do not invent handles, and do not treat local-only commits as contributors unless the user explicitly wants that
-  - Update lockfile: `uv lock`
-  - Sanity checks (optional unless requested): `just test-fast`, `just build`
-  - Manual checks (optional): if the release includes CLI/callback/image-path changes, consider running the `mflux-manual-testing` skill to exercise the touched commands and visually review outputs.
-- Do not tag releases locally unless explicitly requested (normally handled by CI).
-
+- Bump version in `pyproject.toml`
+- Update lockfile: `uv lock`
+- Release-note block of the prep PR itself: `none`
+- Prefer one commit named `release: prepare <version>`
+- Sanity checks (optional unless requested): `just test-fast`, `just build`
+- Do not tag releases locally unless explicitly requested (normally handled by CI)
