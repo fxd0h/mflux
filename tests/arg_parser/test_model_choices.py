@@ -83,3 +83,14 @@ def test_base_model_validation_matches_the_resolver():
         if config.base_model is None:
             assert key in allowed, key
             assert all(alias in allowed for alias in config.aliases), key
+
+
+@pytest.mark.fast
+def test_registry_helpers_are_cached_and_immutable():
+    # The defaults.py helpers cache their registry-derived lists; the ConfigResolution
+    # siblings rebuilt theirs on every call (#595). Same-object across calls proves the
+    # cache; tuples keep a caller from mutating the value everyone else then sees.
+    assert ConfigResolution.base_model_names() is ConfigResolution.base_model_names()
+    assert ConfigResolution.base_model_keys() is ConfigResolution.base_model_keys()
+    assert isinstance(ConfigResolution.base_model_names(), tuple)
+    assert isinstance(ConfigResolution.base_model_keys(), tuple)
