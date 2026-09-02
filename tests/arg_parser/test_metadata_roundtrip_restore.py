@@ -8,11 +8,13 @@ import sys
 
 import pytest
 
+from mflux.models.common.resolution.config_resolution import ConfigResolution
 from mflux.models.flux.cli import flux_generate_redux
 from mflux.models.flux2.cli import flux2_edit_generate, flux2_generate
 from mflux.models.krea2.cli import krea2_generate
 from mflux.models.qwen.cli import qwen_image_edit_generate
 from mflux.models.z_image.cli import z_image_generate
+from mflux.utils.exceptions import ModelConfigError
 
 ELSEWHERE = "/Users/someone-else/photos/cat.png"
 
@@ -261,3 +263,45 @@ def test_a_sidecar_without_a_weights_source_restores_the_entry(parse, sidecar):
     args = parse(krea2_generate, "--config-from-metadata", str(prior))
     assert args.model == "krea-2"
     assert args.model_path is None
+
+
+@pytest.mark.fast
+def test_the_recorded_entry_rides_along_as_the_base(parse, sidecar):
+    # The weights source alone erases the run's family. The entry it resolved to comes
+    # back as the explicit base, so the right CLI pins the exact entry without
+    # re-inferring it from the basename (#708 review).
+    prior = sidecar(model="black-forest-labs/FLUX.2-klein-4B", model_path="/models/my-finetune", image_paths=None)
+    args = parse(flux2_generate, "--config-from-metadata", str(prior))
+    assert args.base_model == "black-forest-labs/FLUX.2-klein-4B"
+    resolved = ConfigResolution.resolve_restricted(
+        args.model,
+        "flux2-klein-4b",
+        model_path=args.model_path,
+        base_model=args.base_model,
+        extra_keys=("flux2-klein-9b", "flux2-klein-base-4b", "flux2-klein-base-9b", "flux2-klein-9b-kv"),
+    )
+    assert resolved.model_name == "black-forest-labs/FLUX.2-klein-4B"
+
+
+@pytest.mark.fast
+def test_a_cross_family_replay_is_still_rejected(parse, sidecar):
+    # Replaying a flux2 checkpoint sidecar through the z-image command used to die inside
+    # weight loading on the default entry's geometry once the source was preferred; the
+    # ride-along base restores the clean rejection the entry produced by name.
+    prior = sidecar(model="black-forest-labs/FLUX.2-klein-4B", model_path="/models/klein-4b-q4", image_paths=None)
+    args = parse(z_image_generate, "--config-from-metadata", str(prior))
+    with pytest.raises(ModelConfigError):
+        ConfigResolution.resolve_restricted(
+            args.model,
+            "z-image",
+            model_path=args.model_path,
+            base_model=args.base_model,
+            extra_keys=("z-image-turbo",),
+        )
+
+
+@pytest.mark.fast
+def test_an_explicit_base_model_beats_the_ride_along(parse, sidecar):
+    prior = sidecar(model="black-forest-labs/FLUX.2-klein-4B", model_path="/models/my-finetune", image_paths=None)
+    args = parse(flux2_generate, "--base-model", "flux2-klein-base-4b", "--config-from-metadata", str(prior))
+    assert args.base_model == "flux2-klein-base-4b"
