@@ -5,6 +5,7 @@ from pathlib import Path
 
 from mflux.cli.defaults import defaults as ui_defaults
 from mflux.cli.parser.parsers import CommandLineParser
+from mflux.models.common.resolution.config_resolution import ConfigResolution
 from mflux.models.flux.variants.in_context.utils.in_context_loras import LORA_NAME_MAP
 
 
@@ -153,6 +154,8 @@ class CompletionGenerator:
         # Check for special cases first
         if action.dest == "model":
             return ":model:_mflux_models"
+        elif action.dest == "base_model":
+            return ":base-model:_mflux_base_models"
         elif action.dest == "quantize":
             return ":quantization:_mflux_quantize"
         elif action.dest == "lora_style":
@@ -231,6 +234,16 @@ class CompletionGenerator:
     _values 'model' \\
         {model_choices} \\
         '*:Hugging Face repo:(org/model)'
+}}
+""")
+
+        # Base-model completion helper: canonical keys only, the same short list the
+        # validation error prints. Every alias and repo id (84 spellings) would bury
+        # the useful suggestions, and the resolver accepts the keys everywhere.
+        base_model_choices = " ".join(f"'{k}[{k} base model]'" for k in ConfigResolution.base_model_keys())
+        helpers.append(f"""_mflux_base_models() {{
+    _values 'base model' \\
+        {base_model_choices}
 }}
 """)
 
