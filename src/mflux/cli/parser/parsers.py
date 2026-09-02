@@ -418,9 +418,13 @@ class CommandLineParser(argparse.ArgumentParser):
             prior_gen_metadata = json.load(namespace.config_from_metadata.open("rt"))
 
             if hasattr(namespace, "model") and not self._option_was_provided("--model", "-m"):
-                # When --model was not provided explicitly, metadata should win
-                # even if the parser set a command-specific default model.
-                namespace.model = prior_gen_metadata.get("model", namespace.model)
+                # When --model was not provided explicitly, metadata should win even if the
+                # parser set a command-specific default model. A run whose weights came from
+                # a path or third-party repo records that source in model_path, and the
+                # source is what the command line actually said, so it wins over the
+                # resolved registry entry in "model" (#705); older sidecars carry only the
+                # entry and restore as before.
+                namespace.model = prior_gen_metadata.get("model_path") or prior_gen_metadata.get("model", namespace.model)
 
             if namespace.base_model is None:
                 # Sidecars written before #695 store the literal string "None" for a builtin
@@ -636,5 +640,12 @@ class CommandLineParser(argparse.ArgumentParser):
             namespace.model_path = None if namespace.model in ui_defaults.model_choices() else namespace.model
         else:
             namespace.model_path = None
+
+        # Hand the weights source to the sidecar writer (#705). GeneratedImage cannot see
+        # the namespace, so this travels the way --no-metadata reaches ImageUtil; set on
+        # every parse so one run's path cannot leak into the next.
+        from mflux.utils.generated_image import GeneratedImage
+
+        GeneratedImage.model_path = namespace.model_path
 
         return namespace
