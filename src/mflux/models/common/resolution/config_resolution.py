@@ -1,5 +1,6 @@
 import copy
 import logging
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from mflux.models.common.resolution.actions import ConfigAction, Rule
@@ -175,27 +176,31 @@ class ConfigResolution:
         raise ValueError(f"No rule matched for model_name: {model_name}")
 
     @staticmethod
-    def base_model_names() -> list[str]:
+    @lru_cache(maxsize=1)
+    def base_model_names() -> tuple[str, ...]:
         # Every value the explicit-base rule accepts: each root config's aliases and its
         # repo id, in priority order. The CLI validates --base-model against this instead
         # of a hand-maintained argparse choices= list, which had drifted far enough to
         # reject names the resolver itself accepts (e.g. `--base-model qwen-image`).
+        # Cached like the defaults.py helpers (AVAILABLE_MODELS is fixed after import),
+        # and a tuple so nobody can mutate the cached value through a reference (#595).
         from mflux.models.common.config.model_config import AVAILABLE_MODELS
 
         names = []
         for config in sorted(AVAILABLE_MODELS.values(), key=lambda m: m.priority):
             if config.base_model is None:
                 names.extend(config.aliases + [config.model_name])
-        return names
+        return tuple(names)
 
     @staticmethod
-    def base_model_keys() -> list[str]:
+    @lru_cache(maxsize=1)
+    def base_model_keys() -> tuple[str, ...]:
         # The canonical key of each root config: the short, printable form of
         # base_model_names(), which is too long to put in an error message once every
         # alias and repo id is spelled out.
         from mflux.models.common.config.model_config import AVAILABLE_MODELS
 
-        return [key for key, config in AVAILABLE_MODELS.items() if config.base_model is None]
+        return tuple(key for key, config in AVAILABLE_MODELS.items() if config.base_model is None)
 
     @staticmethod
     def _check(check: str, ctx: dict) -> bool:
@@ -235,7 +240,7 @@ class ConfigResolution:
         if action == ConfigAction.EXPLICIT_BASE:
             allowed_names = ConfigResolution.base_model_names()
             if base_model not in allowed_names:
-                raise InvalidBaseModel(f"Invalid base_model. Choose one of {allowed_names}")
+                raise InvalidBaseModel(f"Invalid base_model. Choose one of {list(allowed_names)}")
 
             default_base = next(
                 (b for b in base_models if base_model == b.model_name or base_model in b.aliases),

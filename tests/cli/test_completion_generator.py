@@ -101,3 +101,25 @@ def test_completion_generator_prefers_the_cli_own_parser():
     )
     assert "_mflux_generate_lens()" in script
     assert "--prompt" in script
+
+
+@pytest.mark.fast
+def test_completion_generator_completes_base_model():
+    # --base-model lost its completions when #592 dropped the (stale) argparse choices=
+    # list; the flag must route to a helper fed from the resolver instead (#595).
+    generator = CompletionGenerator()
+    parser = generator.create_parser_for_command("mflux-generate")
+    script = generator.generate_command_function("mflux-generate", parser)
+
+    assert "_mflux_base_models" in script
+
+    helpers = generator.generate_helper_functions()
+    assert "_mflux_base_models()" in helpers
+    # The canonical keys, and only them: every alias plus repo id would bury the
+    # useful suggestions (base_model_names() is ~84 entries).
+    helper_body = helpers.split("_mflux_base_models() {", 1)[1].split("}", 1)[0]
+    from mflux.models.common.resolution.config_resolution import ConfigResolution
+
+    for key in ConfigResolution.base_model_keys():
+        assert f"'{key}[" in helper_body, key
+    assert "black-forest-labs" not in helper_body
