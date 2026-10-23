@@ -132,6 +132,7 @@ MFLUX supports the following model families. They have different strengths and w
 |[Ming-Image](src/mflux/models/ming_image/README.md) | Sep 2026 | 6.15B (+16B MoE TE) | Base | No | Design-focused (posters, cards, UI) with strong typography; outputs RGBA. |
 |[MOSS-Image](src/mflux/models/moss_image/README.md) | Oct 2026 | 4.9B (+9B TE) | Base (SFT) | No | Single-stream DiT from OpenMOSS with a Qwen3.5 text encoder. Takes natural-language, tag and JSON-layout prompts. Renders English and Chinese text. 50 steps with CFG. |
 |[Boogu Image](src/mflux/models/boogu/README.md) | Jun 2026 | 10B | Turbo (distilled) | No | DMD-distilled 4-step model with a photographic look and bilingual (EN/ZH) text rendering. |
+|[Fibo 2.0](src/mflux/models/fibo2/README.md) | Oct 2026 | 8.1B (+4B TE) | Base & Edit Turbo (distilled) | No | Text-to-image and editing of up to 5 images in one model, from structured JSON captions or plain text; masks and text rendering. 50 steps with CFG; Edit Turbo edits in 4 steps. |
 |[FIBO](src/mflux/models/fibo/README.md) | Oct 2025+ | 8B | Distilled & Base | No | Very good JSON-based prompt understanding. Has edit capabilities. |
 |[SeedVR2](src/mflux/models/seedvr2/README.md) | Jun 2025 | 3B & 7B | — | No | Best upscaling model. |
 |[Qwen Image](src/mflux/models/qwen/README.md) | Aug 2025+ | 20B | Base | No | Large model (slower); strong prompt understanding and world knowledge. Has edit capabilities |
@@ -301,7 +302,7 @@ MFLUX would not be possible without the great work of:
 
 - The MLX Team for [MLX](https://github.com/ml-explore/mlx) and [MLX examples](https://github.com/ml-explore/mlx-examples)
 - Black Forest Labs for the [FLUX project](https://github.com/black-forest-labs/flux)
-- Bria for the [FIBO project](https://huggingface.co/briaai/FIBO)
+- Bria for the [FIBO project](https://huggingface.co/briaai/FIBO) and [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev)
 - Tongyi Lab for the [Z-Image project](https://tongyi-mai.github.io/Z-Image-blog/)
 - Baidu for the [ERNIE-Image project](https://huggingface.co/baidu/ERNIE-Image)
 - Ideogram for the [Ideogram 4 project](https://huggingface.co/ideogram-ai/ideogram-4-fp8)
