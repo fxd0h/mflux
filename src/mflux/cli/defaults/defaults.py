@@ -35,6 +35,8 @@ MODEL_INFERENCE_STEPS = {
     "ernie-image": 50,
     "ernie-image-turbo": 8,
     "fibo": 50,
+    "fibo-2.0-dev": 50,
+    "fibo-2.0-edit-turbo": 4,
     "fibo-edit": 50,
     "fibo-edit-rmbg": 10,
     "fibo-lite": 8,

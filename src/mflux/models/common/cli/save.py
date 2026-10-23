@@ -13,6 +13,7 @@ from mflux.models.common.weights.saving.saved_model_info import SavedModelInfo, 
 from mflux.models.ernie_image.variants.txt2img.ernie_image import ErnieImage
 from mflux.models.fibo.variants.edit.fibo_edit import FIBOEdit
 from mflux.models.fibo.variants.txt2img.fibo import FIBO
+from mflux.models.fibo2.variants.fibo2 import Fibo2
 from mflux.models.flux.variants.controlnet.flux_controlnet import Flux1Controlnet
 from mflux.models.flux.variants.redux.flux_redux import Flux1Redux
 from mflux.models.flux.variants.txt2img.flux import Flux1
@@ -53,6 +54,9 @@ MODEL_CLASSES: dict[str, type] = {
     "ernie-image": ErnieImage,
     "ernie-image-turbo": ErnieImage,
     "fibo": FIBO,
+    # One Fibo 2.0 class generates and edits; the two checkpoints differ only in their transformer.
+    "fibo-2.0-dev": Fibo2,
+    "fibo-2.0-edit-turbo": Fibo2,
     "fibo-edit": FIBOEdit,
     "fibo-edit-rmbg": FIBOEdit,
     "fibo-lite": FIBO,

@@ -10,6 +10,9 @@ from mflux.models.common.weights.mapping.weight_mapping import WeightTarget
 from mflux.models.common_models.qwen3_5 import Qwen35TextModel
 from mflux.models.fibo.model.fibo_transformer.transformer import FiboTransformer
 from mflux.models.fibo.weights.fibo_weight_definition import FIBOWeightDefinition
+from mflux.models.fibo2.model.fibo2_text_encoder.fibo2_text_encoder import Fibo2TextEncoder
+from mflux.models.fibo2.model.fibo2_transformer.fibo2_transformer import Fibo2Transformer
+from mflux.models.fibo2.weights.fibo2_weight_definition import Fibo2WeightDefinition
 from mflux.models.fibo_vlm.weights.fibo_vlm_weight_definition import FIBOVLMWeightDefinition
 from mflux.models.flux.model.flux_transformer.ada_layer_norm_continuous import AdaLayerNormContinuous
 from mflux.models.flux.model.flux_transformer.transformer import Transformer
@@ -65,6 +68,10 @@ from mflux.models.z_image.weights.z_image_weight_definition import ZImageWeightD
 #                             key_transform (rope.bands dropped)  (captured 2026-10-21)
 #   moss_image_text_encoder   OpenMOSS-Team/MOSS-Image-SFT @ f972bd4b4b9e  text_encoder/, after the component's
 #                             prefix filter (vision tower dropped)  (captured 2026-10-21)
+#   fibo2_transformer         briaai/Fibo-2.0-dev @ fb2b781f9e9e  transformer/ (Fibo-2.0-edit-turbo @ 901c02672d96 has
+#                             the same names)  (captured 2026-10-23)
+#   fibo2_text_encoder        briaai/Fibo-2.0-dev @ fb2b781f9e9e  text_encoder/, after the component's key_transform
+#                             (layer 35 of 36 dropped, vision tower kept)  (captured 2026-10-23)
 # To regenerate one, take the keys of mx.load(<file>) (lazy, reads no weights) or of the shard index's weight_map;
 # only fibo_vlm_decoder is then filtered, to the "model.language_model" and "lm_head" prefixes.
 # A required mapping entry these names cannot satisfy would reject the official checkpoint at load time.
@@ -114,6 +121,8 @@ class _Component:
         ("iris_3b_text_encoder", IrisWeightDefinition.source_text_encoder()),
         ("moss_image_transformer", _Component.of(MOSSImageWeightDefinition, "transformer")),
         ("moss_image_text_encoder", _Component.of(MOSSImageWeightDefinition, "text_encoder")),
+        ("fibo2_transformer", _Component.of(Fibo2WeightDefinition, "transformer")),
+        ("fibo2_text_encoder", _Component.of(Fibo2WeightDefinition, "text_encoder")),
     ],
 )
 def test_an_official_checkpoint_carries_every_required_weight(fixture, component):
@@ -157,6 +166,8 @@ class _Placement:
         ("iris_3b_transformer", IrisTurboWeightDefinition.source_transformer(), IrisTransformer),
         ("moss_image_transformer", _Component.of(MOSSImageWeightDefinition, "transformer"), MOSSImageTransformer),
         ("moss_image_text_encoder", _Component.of(MOSSImageWeightDefinition, "text_encoder"), Qwen35TextModel),
+        ("fibo2_transformer", _Component.of(Fibo2WeightDefinition, "transformer"), Fibo2Transformer),
+        ("fibo2_text_encoder", _Component.of(Fibo2WeightDefinition, "text_encoder"), Fibo2TextEncoder),
     ],
 )  # fmt: skip
 def test_a_transformer_has_a_place_for_every_weight_of_its_official_checkpoint(fixture, component, build):

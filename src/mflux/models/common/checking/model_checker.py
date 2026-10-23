@@ -282,6 +282,10 @@ class ModelChecker:
             from mflux.models.fibo.weights.fibo_weight_definition import FIBOWeightDefinition
 
             return FIBOWeightDefinition
+        if key in {"fibo-2.0-dev", "fibo-2.0-edit-turbo"}:
+            from mflux.models.fibo2.weights.fibo2_weight_definition import Fibo2WeightDefinition
+
+            return Fibo2WeightDefinition
         if key in {"ernie-image", "ernie-image-turbo"}:
             from mflux.models.ernie_image.weights.ernie_weight_definition import ErnieWeightDefinition
 

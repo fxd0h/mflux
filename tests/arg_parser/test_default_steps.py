@@ -16,6 +16,7 @@ from mflux.models.common.config.model_config import AVAILABLE_MODELS
 from mflux.models.common.resolution.config_resolution import ConfigResolution
 from mflux.models.ernie_image.cli import ernie_image_generate, ernie_image_turbo_generate
 from mflux.models.fibo.cli import fibo_edit, fibo_generate
+from mflux.models.fibo2.cli import fibo2_edit_generate, fibo2_generate
 from mflux.models.flux.cli import flux_generate
 from mflux.models.flux2.cli import flux2_edit_generate, flux2_generate
 from mflux.models.flux3.cli import flux3_edit_generate, flux3_generate
@@ -37,6 +38,7 @@ _EXTRA_ARGV = {
     "flux3_edit_generate": ["--image-paths", "a.png"],
     "qwen_image_edit_generate": ["--image-paths", "a.png"],
     "fibo_edit": ["--image-path", "a.png"],
+    "fibo2_edit_generate": ["--image-paths", "a.png"],
     "z_image_turbo_generate_controlnet": ["--control", "a.png"],
     "krea2_controlnet_generate": ["--depth-image-path", "a.png"],
 }
@@ -60,6 +62,8 @@ CLI_DEFAULTS = [
     (qwen_image_edit_generate, "qwen-image-edit", 20),
     (fibo_generate, "fibo", 50),
     (fibo_edit, "fibo-edit", 50),
+    (fibo2_generate, "fibo-2.0-dev", 50),
+    (fibo2_edit_generate, "fibo-2.0-edit-turbo", 4),
     (ernie_image_generate, "ernie-image", 50),
     (ernie_image_turbo_generate, "ernie-image-turbo", 8),
     (ideogram4_generate, "ideogram-4-fp8", 20),

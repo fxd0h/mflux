@@ -234,6 +234,16 @@ class ModelConfig:
 
     @staticmethod
     @lru_cache
+    def fibo2_dev() -> "ModelConfig":
+        return AVAILABLE_MODELS["fibo-2.0-dev"]
+
+    @staticmethod
+    @lru_cache
+    def fibo2_edit_turbo() -> "ModelConfig":
+        return AVAILABLE_MODELS["fibo-2.0-edit-turbo"]
+
+    @staticmethod
+    @lru_cache
     def ernie_image_turbo() -> "ModelConfig":
         return AVAILABLE_MODELS["ernie-image-turbo"]
 
@@ -788,6 +798,40 @@ AVAILABLE_MODELS = {
         max_sequence_length=512,
         supports_guidance=True,
         requires_sigma_shift=False,
+    ),
+    "fibo-2.0-dev": ModelConfig(
+        # Text-to-image and editing in one checkpoint, run with CFG. Sigmas are shifted by the image size
+        # (scheduler_config.json: exponential, base/max shift 0.5/1.15 over 256/4096 tokens).
+        priority=38,
+        aliases=["fibo-2.0-dev", "fibo-2-0-dev", "fibo-2-dev", "fibo2-dev", "fibo-2.0", "fibo-2", "fibo2"],
+        model_name="briaai/Fibo-2.0-dev",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model=None,
+        num_train_steps=1000,
+        max_sequence_length=4096,
+        supports_guidance=True,
+        requires_sigma_shift=True,
+    ),
+    "fibo-2.0-edit-turbo": ModelConfig(
+        # Fibo 2.0 Dev distilled for editing in 4 steps without CFG. Same architecture and schedule.
+        priority=39,
+        aliases=[
+            "fibo-2.0-edit-turbo",
+            "fibo-2-0-edit-turbo",
+            "fibo-2-edit-turbo",
+            "fibo2-edit-turbo",
+            "fibo-2-turbo",
+            "fibo2-turbo",
+        ],
+        model_name="briaai/Fibo-2.0-edit-turbo",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model=None,
+        num_train_steps=1000,
+        max_sequence_length=4096,
+        supports_guidance=False,
+        requires_sigma_shift=True,
     ),
     "z-image": ModelConfig(
         priority=20,
