@@ -80,7 +80,7 @@ class TrainingLoopSpec:
     # Timestep-index sampling distribution: None/"uniform" (flat), "sigmoid" (mid-concentrated,
     # ai-toolkit's default — best for subject identity), "content" (cubic, favors low-noise /
     # fine detail), "style" (favors high-noise / coarse style). Applies to adapters that sample
-    # sigma from the index grid (flux/z-image/ernie); Ideogram has its own sample_sigma override.
+    # sigma from the index grid (flux/z-image/ernie/krea2); FIBO 2 draws its own (sample_sigma).
     timestep_type: str | None = None
 
 

@@ -82,27 +82,36 @@ class TrainingTrainer:
         time_seed = rng.randint(0, 2**32 - 1)
         noise_seed = rng.randint(0, 2**32 - 1)
 
-        low = int(training_spec.training_loop.timestep_low)
-        high = int(
-            config.num_inference_steps
-            if training_spec.training_loop.timestep_high is None
-            else training_spec.training_loop.timestep_high
-        )
-
-        timestep_type = training_spec.training_loop.timestep_type
-        if timestep_type and timestep_type != "uniform":
-            # Non-uniform timestep-index sampling (sigmoid/content/style). Identity learning
-            # lives in the mid/low-noise band that flat sampling under-weights.
-            t = TrainingTrainer._sample_timestep_index(timestep_type, low, high, rng)
+        sample_sigma = getattr(adapter, "sample_sigma", None)
+        if sample_sigma is not None:
+            # The adapter draws the noise level from a continuous distribution (FIBO 2 follows its reference
+            # trainer). predict_noise gets it as a grid of one value, sigmas[t] with t = 0. timestep_low,
+            # timestep_high and timestep_type select from the scheduler's grid, so they do not apply.
+            sigmas = mx.array([sample_sigma(rng=rng, image_seq_len=config.image_seq_len)], dtype=mx.float32)
+            t = 0
         else:
-            t = int(
-                mx.random.randint(
-                    low=low,
-                    high=high,
-                    shape=[],
-                    key=mx.random.key(time_seed),
-                )
+            sigmas = config.scheduler.sigmas
+            low = int(training_spec.training_loop.timestep_low)
+            high = int(
+                config.num_inference_steps
+                if training_spec.training_loop.timestep_high is None
+                else training_spec.training_loop.timestep_high
             )
+
+            timestep_type = training_spec.training_loop.timestep_type
+            if timestep_type and timestep_type != "uniform":
+                # Non-uniform timestep-index sampling (sigmoid/content/style). Identity learning
+                # lives in the mid/low-noise band that flat sampling under-weights.
+                t = TrainingTrainer._sample_timestep_index(timestep_type, low, high, rng)
+            else:
+                t = int(
+                    mx.random.randint(
+                        low=low,
+                        high=high,
+                        shape=[],
+                        key=mx.random.key(time_seed),
+                    )
+                )
 
         clean_image = item.clean_latents
         pure_noise = mx.random.normal(
@@ -114,13 +123,13 @@ class TrainingTrainer:
         latents_t = LatentCreator.add_noise_by_interpolation(
             clean=clean_image,
             noise=pure_noise,
-            sigma=config.scheduler.sigmas[t],
+            sigma=sigmas[t],
         )
 
         predicted_noise = adapter.predict_noise(
             t=t,
             latents_t=latents_t,
-            sigmas=config.scheduler.sigmas,
+            sigmas=sigmas,
             cond=item.cond,
             config=config,
         )
