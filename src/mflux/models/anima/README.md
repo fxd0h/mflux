@@ -75,6 +75,8 @@ mflux-generate-anima --model ~/models/Anima-aesthetic-mflux-q8 --prompt "masterp
 
 A saved folder holds the transformer, the text encoder, the VAE and both tokenizers. The command picks the variant
 from the folder name (`aesthetic`, `base`, otherwise Turbo); `--base-model anima-base` names it explicitly.
+The three variants have the same weight keys and shapes, so nothing in the weights tells them apart. A renamed
+Aesthetic or Base folder therefore runs as Turbo (10 steps, guidance 1) unless you pass `--base-model`.
 
 Saved checkpoints of the three variants are on Hugging Face as `mflux-community/anima-<variant>-mflux-<level>`,
 with `<variant>` one of `turbo`, `aesthetic`, `base` and `<level>` one of `q4`, `q5`, `q6`, `q8`, `bf16`. The repo name
