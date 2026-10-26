@@ -1,8 +1,8 @@
 from argparse import Namespace
 
 from mflux.callbacks.callback_manager import CallbackManager
-from mflux.cli.parser.parsers import CommandLineParser
-from mflux.models.common.config.model_config import ModelConfig
+from mflux.cli.parser.parsers import CommandLineParser, lora_init_kwargs_from_args
+from mflux.models.common.config.model_config import AVAILABLE_MODELS, ModelConfig
 from mflux.models.common.resolution.config_resolution import ConfigResolution
 from mflux.models.moss_image.latent_creator import MOSSImageLatentCreator
 from mflux.models.moss_image.model.moss_image_scheduler import MOSSImageScheduler
@@ -17,20 +17,25 @@ from mflux.utils.prompt_util import PromptUtil
 DEFAULT_MODEL = "moss-image-sft"
 DEFAULT_GUIDANCE = MOSSImage.DEFAULT_GUIDANCE
 DEFAULT_UNCOND_SKIP_LAYERS = MOSSImage.DEFAULT_UNCOND_SKIP_LAYERS
+DEFAULT_BAKE_LORA = MOSSImage.DEFAULT_BAKE_LORA
+
+# The other entry this CLI serves: MOSS-Image-Base. Its model card gives the same sampling settings as SFT.
+FAMILY_MODELS = tuple(key for key in AVAILABLE_MODELS if key.startswith("moss-image-") and key != DEFAULT_MODEL)
 
 # Options this CLI accepts but cannot honour. The runtime warning and mflux-capabilities read this.
 IGNORED_OPTIONS = {
     "--scheduler": "MOSS-Image samples on the snapped flow-matching schedule it was trained with.",
+    "--lora-style": "Named LoRA styles are only supported by the Flux in-context CLI; use --lora.",
 }
 
 
 def build_parser() -> CommandLineParser:
     parser = CommandLineParser(
-        description="Generate an image using MOSS-Image-SFT (50 steps, CFG 3) based on a prompt."
+        description="Generate an image using MOSS-Image (SFT or Base, 50 steps, CFG 3) based on a prompt."
     )
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False, default_model=DEFAULT_MODEL)
-    # No add_lora_arguments(): mflux has no LoRA mapping for MOSS-Image.
+    parser.add_lora_arguments(bake_by_default=DEFAULT_BAKE_LORA)
     parser.add_image_generator_arguments(supports_metadata_config=True)
     parser.add_step_cache_arguments()
     parser.add_argument("--uncond-skip-layers", type=int, nargs="*", default=None, metavar="LAYER", help=f"Zero-based transformer layers that the negative CFG branch skips. Pass the flag with no values to skip no layer. Default: {' '.join(map(str, DEFAULT_UNCOND_SKIP_LAYERS))}.")  # fmt: off
@@ -46,7 +51,13 @@ class MOSSImageCommand:
     def validate(args: Namespace) -> ModelConfig:
         # Weight-free: resolves --model against the in-memory registry only. The size and step
         # checks run here so that a bad value fails before the 27 GB checkpoint loads.
-        model_config = ConfigResolution.resolve_restricted(args.model, DEFAULT_MODEL, model_path=args.model_path)
+        model_config = ConfigResolution.resolve_restricted(
+            args.model,
+            DEFAULT_MODEL,
+            model_path=args.model_path,
+            extra_keys=FAMILY_MODELS,
+            base_model=args.base_model,
+        )
         MOSSImageLatentCreator.check_size(height=args.height, width=args.width)
         if args.steps is not None:
             MOSSImageScheduler.compute_sigmas(args.steps)
@@ -61,6 +72,7 @@ class MOSSImageCommand:
             model_config=MOSSImageCommand.validate(args),
             quantize=args.quantize,
             model_path=args.model_path,
+            **lora_init_kwargs_from_args(args),
         )
 
     @staticmethod

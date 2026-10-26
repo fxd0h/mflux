@@ -23,9 +23,17 @@ def isolated_cli(monkeypatch):
 
 
 @pytest.fixture
-def full_argv(tmp_path):
+def lora_file(tmp_path):
+    # The parser resolves --lora before the model is built, so the file has to exist. The fake never reads it.
+    path = tmp_path / "turbo.safetensors"
+    path.touch()
+    return path
+
+
+@pytest.fixture
+def full_argv(tmp_path, lora_file):
     # Every value differs from the parser default so a hardcoded default goes red. Sizes are
-    # plain ints here and go to the model unchanged; there are no LoRA flags.
+    # plain ints here and go to the model unchanged.
     return [
         "--prompt", "a puffin",
         "--seed", "7", "8",
@@ -36,6 +44,8 @@ def full_argv(tmp_path):
         "--step-cache-ratio", "0.25",
         "--uncond-skip-layers", "20", "24",
         "-q", "8",
+        "--lora", str(lora_file), "0.7",
+        "--bake-lora",
         "--make-conf",
         "--output", str(tmp_path / "out.png"),
     ]  # fmt: skip
@@ -68,12 +78,15 @@ def expected_generate_call(seed):
 
 
 @pytest.mark.fast
-def test_main_call_sequence_is_pinned(monkeypatch, tmp_path, full_argv):
+def test_main_call_sequence_is_pinned(monkeypatch, tmp_path, full_argv, lora_file):
     model = run_main(monkeypatch, full_argv)
     assert model.init_kwargs == {
         "model_config": AVAILABLE_MODELS["moss-image-sft"],
         "quantize": 8,
         "model_path": None,
+        "lora_paths": [str(lora_file)],
+        "lora_scales": [0.7],
+        "bake_lora": True,
     }
     assert model.generate_calls == [expected_generate_call(7), expected_generate_call(8)]
     # With more than one seed parse_args renames --output to <stem>_seed_{seed}; that
@@ -95,6 +108,7 @@ def test_main_runs_the_default_size_and_steps(monkeypatch, tmp_path):
     assert call["uncond_skip_layers"] == (22,)
     assert model.images[0].saves == [(str(tmp_path / "out.png"), False)]
     assert model.init_kwargs["quantize"] is None
+    assert (model.init_kwargs["lora_paths"], model.init_kwargs["bake_lora"]) == (None, False)
 
 
 @pytest.mark.fast
@@ -114,13 +128,41 @@ def test_main_warns_about_every_ignored_option_before_building_the_model(monkeyp
 
 
 @pytest.mark.fast
-def test_main_passes_a_custom_checkpoint_through(monkeypatch):
+@pytest.mark.parametrize(("base_argv", "key"), [([], "moss-image-sft"), (["--base-model", "moss-image-base"], "moss-image-base")])  # fmt: skip
+def test_main_passes_a_custom_checkpoint_through(monkeypatch, base_argv, key):
     # A repo id is not a registry alias: parse_args moves it to model_path and the command's
-    # own entry supplies the config. Nothing is downloaded with the fake.
-    # Today's behavior: --base-model does not change the config this command runs.
-    model = run_main(monkeypatch, ["--prompt", "x", "--model", "someone/my-finetune", "--base-model", "dev"])
+    # own entry supplies the config, or the family entry --base-model names. Nothing is downloaded with the fake.
+    model = run_main(monkeypatch, ["--prompt", "x", "--model", "someone/my-finetune", *base_argv])
     assert model.init_kwargs["model_path"] == "someone/my-finetune"
-    assert model.init_kwargs["model_config"] is AVAILABLE_MODELS["moss-image-sft"]
+    assert model.init_kwargs["model_config"] is AVAILABLE_MODELS[key]
+
+
+@pytest.mark.fast
+def test_main_refuses_a_base_model_outside_the_family(monkeypatch):
+    from mflux.utils.exceptions import ModelConfigError
+
+    monkeypatch.setattr(sys, "argv", ["mflux-generate-moss-image", "--prompt", "x", "--model", "someone/my-finetune", "--base-model", "dev"])  # fmt: skip
+    with pytest.raises(ModelConfigError, match="only accepts the aliases"):
+        cli.main()
+    assert FakeMOSSImage.instances == []
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("name", ["moss-image-base", "moss-base", "OpenMOSS-Team/MOSS-Image-Base"])
+def test_main_runs_the_base_model_with_the_sft_settings(monkeypatch, name):
+    model = run_main(monkeypatch, ["--prompt", "x", "--model", name])
+    assert model.init_kwargs["model_config"] is AVAILABLE_MODELS["moss-image-base"]
+    call = model.generate_calls[0]
+    assert (call["num_inference_steps"], call["guidance"], call["uncond_skip_layers"]) == (50, 3.0, (22,))
+
+
+@pytest.mark.fast
+def test_main_keeps_loras_as_runtime_layers_unless_asked_to_bake(monkeypatch, lora_file):
+    model = run_main(monkeypatch, ["--prompt", "x", "--lora", str(lora_file), "0.6"])
+    assert model.init_kwargs["lora_paths"] == [str(lora_file)]
+    assert model.init_kwargs["lora_scales"] == [0.6]
+    assert model.init_kwargs["bake_lora"] is False
+    assert cli.build_parser().get_default("bake_lora") is cli.DEFAULT_BAKE_LORA is MOSSImage.DEFAULT_BAKE_LORA is False
 
 
 @pytest.mark.fast
@@ -248,6 +290,9 @@ def test_load_returns_a_bare_model(monkeypatch):
         "model_config": AVAILABLE_MODELS["moss-image-sft"],
         "quantize": 8,
         "model_path": None,
+        "lora_paths": None,
+        "lora_scales": None,
+        "bake_lora": False,
     }
     registry = model.callbacks
     assert (registry.before_loop, registry.in_loop, registry.after_loop, registry.interrupt) == ([], [], [], [])

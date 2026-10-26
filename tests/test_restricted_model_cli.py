@@ -45,7 +45,7 @@ CLI_MODELS = [
     (ernie_image_turbo_generate, "ernie-image-turbo", "ernie-image", (), ()),
     (lens_generate, "lens-turbo", "dev", (), ()),
     (boogu_image_generate, "boogu-image-turbo", "dev", (), ()),
-    (moss_image_generate, "moss-image-sft", "dev", (), ()),
+    (moss_image_generate, "moss-image-sft", "dev", moss_image_generate.FAMILY_MODELS, ()),
     (ideogram4_generate, "ideogram-4-fp8", "dev", (), ()),
     (z_image_generate, "z-image", "dev", z_image_generate.FAMILY_MODELS, ()),
     (flux2_generate, "flux2-klein-4b", "dev", flux2_generate.FAMILY_MODELS, ()),
@@ -157,6 +157,32 @@ class TestRestrictedModelConfig:
         iris_keys = {key for key in AVAILABLE_MODELS if key.startswith("iris-")}
         assert set(iris_generate.FAMILY_MODELS) | {"iris-3b"} == iris_keys
         assert iris_generate.FAMILY_MODELS == ("iris-3b-base",)
+
+    def test_moss_family_covers_every_moss_registry_entry(self):
+        moss_keys = {key for key in AVAILABLE_MODELS if key.startswith("moss-")}
+        assert set(moss_image_generate.FAMILY_MODELS) | {"moss-image-sft"} == moss_keys
+        assert moss_image_generate.FAMILY_MODELS == ("moss-image-base",)
+
+    @pytest.mark.parametrize(
+        ("path", "key"),
+        [
+            # The folder mflux-save names after the repo, a short name, and names that carry no family alias.
+            ("~/models/MOSS-Image-Base-mflux-q8", "moss-image-base"),
+            ("~/models/moss-base-q4", "moss-image-base"),
+            ("~/models/MOSS-Image-SFT-mflux-q8", "moss-image-sft"),
+            ("~/models/moss-image-q4", "moss-image-sft"),
+            ("~/models/my-finetune", "moss-image-sft"),
+        ],
+    )
+    def test_moss_checkpoint_name_selects_the_family_entry(self, monkeypatch, path, key):
+        config = self._resolve_via_parser(
+            monkeypatch,
+            moss_image_generate,
+            "moss-image-sft",
+            ["--model", path],
+            extra_keys=moss_image_generate.FAMILY_MODELS,
+        )
+        assert config is AVAILABLE_MODELS[key]
 
     def test_z_image_cli_rejects_the_controlnet_sibling(self, monkeypatch):
         # The base CLI runs z-image and z-image-turbo; the ControlNet entry has its own

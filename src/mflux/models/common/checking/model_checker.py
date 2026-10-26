@@ -318,7 +318,7 @@ class ModelChecker:
             from mflux.models.ming_image.weights.ming_image_weight_definition import MingImageWeightDefinition
 
             return MingImageWeightDefinition
-        if key == "moss-image-sft":
+        if key in {"moss-image-sft", "moss-image-base"}:
             from mflux.models.moss_image.weights.moss_image_weight_definition import MOSSImageWeightDefinition
 
             return MOSSImageWeightDefinition

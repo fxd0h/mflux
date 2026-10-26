@@ -62,7 +62,8 @@ from mflux.models.z_image.weights.z_image_weight_definition import ZImageWeightD
 #   iris_3b_text_encoder      Qwen/Qwen3-VL-4B-Instruct @ ebb281ec70b0  model-0000{1,2}-of-00002.safetensors, after the
 #                             component's key_transform (vision tower dropped, all 36 layers kept)  (captured 2026-10-18)
 #   moss_image_transformer    OpenMOSS-Team/MOSS-Image-SFT @ f972bd4b4b9e  transformer/, after the component's
-#                             key_transform (rope.bands dropped)  (captured 2026-10-21)
+#                             key_transform (rope.bands dropped)  (captured 2026-10-21; the transformer of
+#                             OpenMOSS-Team/MOSS-Image-Base @ 85975793d8b3 has the same names, checked 2026-10-26)
 #   moss_image_text_encoder   OpenMOSS-Team/MOSS-Image-SFT @ f972bd4b4b9e  text_encoder/, after the component's
 #                             prefix filter (vision tower dropped)  (captured 2026-10-21)
 # To regenerate one, take the keys of mx.load(<file>) (lazy, reads no weights) or of the shard index's weight_map;

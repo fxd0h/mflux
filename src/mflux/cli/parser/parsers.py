@@ -159,18 +159,20 @@ class CommandLineParser(argparse.ArgumentParser):
     def add_compute_precision_arguments(self) -> None:
         self.add_argument("--compute-precision", type=str, choices=sorted(ComputePrecision.CHOICES), default=None, help="Run the inside of the attention and feed-forward layers in this precision; the residual stream, norms, text encoder and VAE keep the model's own. float16 helps most on GPUs with slow bfloat16 (Apple M1 and M2); the gain is small or zero on M4 and M5. The image changes slightly for the same seed. Default: off.")
 
-    def add_lora_arguments(self) -> None:
+    def add_lora_arguments(self, bake_by_default: bool = True) -> None:
+        # bake_by_default is off for a model whose LoRAs lose part of their update in a merge (MOSS-Image).
         self.supports_lora = True
         lora_group = self.add_argument_group("LoRA configuration")
         lora_group.add_argument("--lora-style", type=str, choices=sorted(LORA_NAME_MAP.keys()), help="Style of the LoRA to use (e.g., 'storyboard' for film storyboard style)")
         lora_group.add_argument("--lora", dest="lora", action="append", nargs="+", default=None, metavar=("PATH", "SCALE"), help="Add a LoRA as an atomic PATH with optional SCALE (default 1.0). Repeatable: --lora A.safetensors 0.7 --lora B.safetensors. PATH accepts local files, HuggingFace repos (org/model), or collection format (repo:filename.safetensors). Preferred over --lora-paths/--lora-scales.")
         self.add_argument("--lora-paths", type=str, nargs="*", default=None, help="[DEPRECATED: use --lora] LoRA paths: local files, HuggingFace repos (org/model), or collection format (repo:filename.safetensors). Pass it with no values to run without the LoRAs a --config-from-conf sidecar would otherwise restore.")
         self.add_argument("--lora-scales", type=float, nargs="*", default=None, help="[DEPRECATED: use --lora] Scaling factor to adjust the impact of LoRA weights on the model. A value of 1.0 applies the LoRA weights as they are.")
+        bake_help = "(default: on). Use --no-bake-lora to keep runtime adapters." if bake_by_default else "(default: off). Without it, the adapters stay runtime layers and apply all of their update."
         lora_group.add_argument(
             "--bake-lora",
             action=argparse.BooleanOptionalAction,
-            default=True,
-            help="Merge LoRA/LoKr deltas into base weights after load (default: on). Use --no-bake-lora to keep runtime adapters.",
+            default=bake_by_default,
+            help=f"Merge LoRA/LoKr deltas into base weights after load {bake_help}",
         )
 
     def _add_image_generator_common_arguments(self, supports_dimension_scale_factor=False) -> None:

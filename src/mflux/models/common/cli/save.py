@@ -70,6 +70,7 @@ MODEL_CLASSES: dict[str, type] = {
     "krea-2-raw": Krea2,
     "krea-dev": Flux1,
     "ming-image-design": MingImage,
+    "moss-image-base": MOSSImage,
     "moss-image-sft": MOSSImage,
     "qwen-image": QwenImage,
     # One Qwen-Image-2.1 checkpoint does text-to-image and editing. QwenImage21Edit saves all of it

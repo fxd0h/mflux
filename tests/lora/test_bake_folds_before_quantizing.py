@@ -17,6 +17,7 @@ from mflux.models.common.weights.loading.loaded_weights import LoadedWeights, Me
 from mflux.models.flux.flux_initializer import FluxInitializer
 from mflux.models.flux2.flux2_initializer import Flux2Initializer
 from mflux.models.krea2.krea2_initializer import Krea2Initializer
+from mflux.models.moss_image.moss_image_initializer import MOSSImageInitializer
 from mflux.models.qwen.qwen_initializer import QwenImageInitializer
 from mflux.models.z_image.z_image_initializer import ZImageInitializer
 
@@ -378,7 +379,14 @@ def test_dense_component_is_only_offered_for_an_unquantized_checkpoint():
 
 @pytest.mark.parametrize(
     "initializer",
-    [FluxInitializer, Flux2Initializer, QwenImageInitializer, Krea2Initializer, ZImageInitializer],
+    [
+        FluxInitializer,
+        Flux2Initializer,
+        QwenImageInitializer,
+        Krea2Initializer,
+        ZImageInitializer,
+        MOSSImageInitializer,
+    ],
 )
 @pytest.mark.parametrize("stored_bits", [None, 8])
 def test_initializers_hand_the_loaded_transformer_weights_to_the_loader(monkeypatch, initializer, stored_bits):
@@ -420,6 +428,7 @@ _INIT_HELPERS = (
         (QwenImageInitializer, "init_edit"),
         (Krea2Initializer, "init"),
         (ZImageInitializer, "init"),
+        (MOSSImageInitializer, "init"),
     ],
 )
 def test_every_init_passes_the_loaded_weights_to_apply_lora(monkeypatch, initializer, method):

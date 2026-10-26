@@ -214,6 +214,11 @@ class ModelConfig:
 
     @staticmethod
     @lru_cache
+    def moss_image_base() -> "ModelConfig":
+        return AVAILABLE_MODELS["moss-image-base"]
+
+    @staticmethod
+    @lru_cache
     def fibo() -> "ModelConfig":
         return AVAILABLE_MODELS["fibo"]
 
@@ -976,6 +981,19 @@ AVAILABLE_MODELS = {
         priority=37,
         aliases=["moss-image-sft", "moss-image", "moss"],
         model_name="OpenMOSS-Team/MOSS-Image-SFT",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model=None,
+        num_train_steps=1000,
+        max_sequence_length=4096,
+        supports_guidance=True,
+        requires_sigma_shift=False,
+    ),
+    "moss-image-base": ModelConfig(
+        # The same architecture, text encoder and VAE as SFT. Only the transformer weights differ.
+        priority=38,
+        aliases=["moss-image-base", "moss-base"],
+        model_name="OpenMOSS-Team/MOSS-Image-Base",
         base_model=None,
         controlnet_model=None,
         custom_transformer_model=None,

@@ -3,6 +3,7 @@ import mlx.core as mx
 import mflux.models.moss_image.model.moss_image_scheduler  # noqa: F401 - registers the moss_image scheduler
 from mflux.callbacks.callback_registry import CallbackRegistry
 from mflux.models.common.config import ModelConfig
+from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.tokenizer import TokenizerLoader
 from mflux.models.common.weights.loading.loaded_weights import LoadedWeights
 from mflux.models.common.weights.loading.weight_applier import WeightApplier
@@ -10,6 +11,7 @@ from mflux.models.common.weights.loading.weight_loader import WeightLoader
 from mflux.models.common_models.qwen3_5 import Qwen35TextModel
 from mflux.models.flux2.model.flux2_vae.vae import Flux2VAE
 from mflux.models.moss_image.model.moss_image_transformer.moss_image_transformer import MOSSImageTransformer
+from mflux.models.moss_image.weights.moss_image_lora_mapping import MOSSImageLoRAMapping
 from mflux.models.moss_image.weights.moss_image_weight_definition import MOSSImageWeightDefinition
 
 # MOSS-Image ships the FLUX.2 VAE with the small decoder (vae/config.json decoder_block_out_channels).
@@ -17,13 +19,15 @@ MOSS_IMAGE_DECODER_BLOCK_OUT_CHANNELS = (96, 192, 384, 384)
 
 
 class MOSSImageInitializer:
-    # No LoRA parameters: mflux has no LoRA mapping for this architecture.
     @staticmethod
     def init(
         model,
         model_config: ModelConfig,
         quantize: int | None,
         model_path: str | None = None,
+        lora_paths: list[str] | None = None,
+        lora_scales: list[float] | None = None,
+        bake_lora: bool = False,
     ) -> None:
         path = model_path if model_path else model_config.model_name
         MOSSImageInitializer._init_config(model, model_config)
@@ -31,6 +35,7 @@ class MOSSImageInitializer:
         MOSSImageInitializer._init_tokenizers(model, path)
         MOSSImageInitializer._init_models(model, model_config)
         MOSSImageInitializer._apply_weights(model, weights, quantize)
+        MOSSImageInitializer._apply_lora(model, lora_paths, lora_scales, bake_lora, weights)
         del weights
         mx.eval(model.parameters())
         mx.clear_cache()
@@ -72,4 +77,21 @@ class MOSSImageInitializer:
                 "transformer": model.transformer,
                 "text_encoder": model.text_encoder,
             },
+        )
+
+    @staticmethod
+    def _apply_lora(
+        model,
+        lora_paths: list[str] | None,
+        lora_scales: list[float] | None,
+        bake_lora: bool,
+        weights: LoadedWeights,
+    ) -> None:
+        model.lora_paths, model.lora_scales = LoRALoader.load_and_apply_lora(
+            lora_mapping=MOSSImageLoRAMapping.get_mapping(),
+            transformer=model.transformer,
+            lora_paths=lora_paths,
+            lora_scales=lora_scales,
+            bake_lora=bake_lora,
+            dense_weights=weights.dense_component("transformer"),
         )

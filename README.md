@@ -130,7 +130,7 @@ MFLUX supports the following model families. They have different strengths and w
 |[ERNIE-Image](src/mflux/models/ernie_image/README.md) | Apr 2026 | 8B | Distilled & Base | No | Single-stream DiT from Baidu. Vivid, high-contrast output. |
 |[Lens](src/mflux/models/lens/README.md) | May 2026 | 3.8B (+20B TE) | Turbo (distilled) | No | Dual-stream MMDiT from Microsoft with a GPT-OSS text encoder. Strong prompt adherence in 4 steps. |
 |[Ming-Image](src/mflux/models/ming_image/README.md) | Sep 2026 | 6.15B (+16B MoE TE) | Base | No | Design-focused (posters, cards, UI) with strong typography; outputs RGBA. |
-|[MOSS-Image](src/mflux/models/moss_image/README.md) | Oct 2026 | 4.9B (+9B TE) | Base (SFT) | No | Single-stream DiT from OpenMOSS with a Qwen3.5 text encoder. Takes natural-language, tag and JSON-layout prompts. Renders English and Chinese text. 50 steps with CFG. |
+|[MOSS-Image](src/mflux/models/moss_image/README.md) | Oct 2026 | 4.9B (+9B TE) | SFT & Base | No | Single-stream DiT from OpenMOSS with a Qwen3.5 text encoder. Takes natural-language, tag and JSON-layout prompts. Renders English and Chinese text. 50 steps with CFG, or 8 or 4 steps with a community step-distilled LoRA. |
 |[Boogu Image](src/mflux/models/boogu/README.md) | Jun 2026 | 10B | Turbo (distilled) | No | DMD-distilled 4-step model with a photographic look and bilingual (EN/ZH) text rendering. |
 |[FIBO](src/mflux/models/fibo/README.md) | Oct 2025+ | 8B | Distilled & Base | No | Very good JSON-based prompt understanding. Has edit capabilities. |
 |[SeedVR2](src/mflux/models/seedvr2/README.md) | Jun 2025 | 3B & 7B | — | No | Best upscaling model. |

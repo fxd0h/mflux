@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.moss_image.variants.txt2img.moss_image import MOSSImage
 from mflux.utils.image_compare import ImageCompare
 
@@ -18,12 +19,14 @@ class ImageGeneratorMOSSImageTestHelper:
         guidance: float = MOSSImage.DEFAULT_GUIDANCE,
         quantize: int | None = None,
         mismatch_threshold: float | None = None,
+        model_config: ModelConfig | None = None,
+        lora_paths: list[str] | None = None,
     ):
         reference_image_path = ImageGeneratorMOSSImageTestHelper.resolve_path(reference_image_path)
         output_image_path = ImageGeneratorMOSSImageTestHelper.resolve_path(output_image_path)
 
         try:
-            model = MOSSImage(quantize=quantize)
+            model = MOSSImage(quantize=quantize, model_config=model_config, lora_paths=lora_paths)
 
             result = model.generate_image(
                 seed=seed,

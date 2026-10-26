@@ -227,6 +227,9 @@ def test_lora_kwargs_match_the_constructor():
     assert "lora_paths" not in run_save("fibo")["kwargs"]
     # FLUX 3 bakes LoRAs like FLUX.2.
     assert {"lora_paths", "lora_scales", "bake_lora"} <= run_save("flux3")["kwargs"].keys()
+    # MOSS-Image takes LoRAs too. mflux-save bakes them at load like every model, which folds them into the
+    # weights before -q quantizes them.
+    assert run_save("moss")["kwargs"]["bake_lora"] is True
 
 
 @pytest.mark.fast
@@ -244,6 +247,15 @@ def test_lora_is_refused_for_models_that_cannot_apply_it(name, lora_flag, tmp_pa
         run_save(name, lora_paths=[str(lora_file)], lora_flag=lora_flag)
     assert exit_info.value.code == 2
     assert "cannot apply LoRA weights" in capsys.readouterr().err
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(("name", "key"), [("moss", "moss-image-sft"), ("moss-base", "moss-image-base")])
+def test_moss_saves_with_the_config_of_the_entry_that_was_asked_for(name, key):
+    # Base and SFT share the class and the architecture; the config names the repo the weights come from.
+    built = run_save(name)
+    assert built["class"] is save.MODEL_CLASSES["moss-image-sft"]
+    assert built["kwargs"]["model_config"] is AVAILABLE_MODELS[key]
 
 
 @pytest.mark.fast

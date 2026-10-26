@@ -48,7 +48,7 @@ The load step does these tasks in this sequence:
 2. It loads the tokenizers.
 3. It makes the components.
 4. It puts the weights into the components. If you give `--quantize`, it quantizes them.
-5. If you give `--lora`, it applies each LoRA to the transformer. By default, it merges the LoRA into the weights. Use `--no-bake-lora` to keep the LoRA separate.
+5. If you give `--lora`, it applies each LoRA to the transformer. By default, it merges the LoRA into the weights. Use `--no-bake-lora` to keep the LoRA separate. MOSS-Image keeps the LoRA separate by default. Use `--bake-lora` to merge it.
 
 ## generate
 
