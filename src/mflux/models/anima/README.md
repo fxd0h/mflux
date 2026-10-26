@@ -89,6 +89,13 @@ Measured on an M5 Max at 1024x1024 with the defaults above (one warm-up image fi
 The peak at the end is the Qwen-Image VAE decoding the full image. `--low-ram` decodes it in tiles: Turbo with
 `-q 8` then peaks at 4.6 GB.
 
+`--compute-precision float16` runs the attention and feed-forward layers of the blocks in float16. It is meant
+for M1 and M2, where bfloat16 is slow; on an M5 Max it is about 20% slower than bf16. The image changes
+slightly for the same seed.
+
+Step reuse (`--step-cache-ratio`) is not offered: on Anima's schedule it skips a run of early steps and the
+composition breaks.
+
 ## LoRA
 
 `--lora` loads Anima LoRAs in the common layouts: kohya's sd-scripts (`lora_unet_blocks_0_self_attn_q_proj`), PEFT

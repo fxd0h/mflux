@@ -1,7 +1,8 @@
 import mlx.core as mx
 from mlx import nn
 
-from mflux.models.anima.model.anima_transformer.anima_block import AnimaBlock
+from mflux.models.anima.model.anima_transformer.anima_attention import AnimaAttention
+from mflux.models.anima.model.anima_transformer.anima_block import AnimaBlock, AnimaFeedForward
 from mflux.models.anima.model.anima_transformer.anima_embedders import (
     AnimaFinalLayer,
     AnimaPatchEmbed,
@@ -10,6 +11,7 @@ from mflux.models.anima.model.anima_transformer.anima_embedders import (
 )
 from mflux.models.anima.model.anima_transformer.anima_llm_adapter import AnimaLLMAdapter
 from mflux.models.anima.model.anima_transformer.anima_rope import AnimaRoPE
+from mflux.models.common.compute_precision import ComputePrecision
 
 
 class AnimaTransformer(nn.Module):
@@ -54,6 +56,10 @@ class AnimaTransformer(nn.Module):
             x = block(x, emb, adaln_lora, context, rope)
         x = self.final_layer(x, emb, adaln_lora)
         return self._unpatchify(x, channels, height, width)
+
+    def apply_compute_precision(self, precision: ComputePrecision) -> None:
+        # Only the blocks: the LLM adapter has its own attention class and keeps the model's precision.
+        precision.apply(self, (AnimaAttention, AnimaFeedForward))
 
     def encode_text(self, hidden_states: mx.array, t5_ids: mx.array) -> mx.array:
         # The context the blocks attend to: the adapter output, zero-padded to 512 tokens like the reference.

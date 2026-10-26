@@ -39,6 +39,7 @@ class Anima(nn.Module):
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
         bake_lora: bool = True,
+        compute_precision: mx.Dtype | None = None,
     ):
         super().__init__()
         AnimaInitializer.init(
@@ -49,6 +50,7 @@ class Anima(nn.Module):
             lora_paths=lora_paths,
             lora_scales=lora_scales,
             bake_lora=bake_lora,
+            compute_precision=compute_precision,
         )
 
     @property
@@ -112,6 +114,7 @@ class Anima(nn.Module):
             lora_scales=self.lora_scales,
             negative_prompt=negative_prompt,
             generation_time=config.time_steps.format_dict["elapsed"],
+            generation_parameters=self.compute_precision.generation_parameters(),
         )
 
     def save_model(self, base_path: str) -> None:

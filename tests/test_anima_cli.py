@@ -2,6 +2,7 @@ import copy
 import sys
 import warnings
 
+import mlx.core as mx
 import pytest
 
 from mflux.callbacks.callback_registry import CallbackRegistry
@@ -98,6 +99,10 @@ class TestAnimaGenerateCli:
         assert model.kwargs["quantize"] == 8
         assert model.kwargs["lora_paths"] == [str(lora)]
         assert model.kwargs["model_config"] is AVAILABLE_MODELS["anima-aesthetic"]
+
+    def test_float16_compute_reaches_the_model_only_when_asked(self, run_cli):
+        assert run_cli()[0].kwargs["compute_precision"] is None
+        assert run_cli("--compute-precision", "float16")[0].kwargs["compute_precision"] == mx.float16
 
     def test_a_foreign_model_is_rejected(self, run_cli):
         with pytest.raises(Exception, match="only accepts the aliases"):

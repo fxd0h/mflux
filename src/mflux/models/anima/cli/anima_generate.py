@@ -6,6 +6,7 @@ from mflux.cli.parser.parsers import CommandLineParser, lora_init_kwargs_from_ar
 from mflux.models.anima.latent_creator.anima_latent_creator import AnimaLatentCreator
 from mflux.models.anima.model.anima_scheduler import AnimaSampler
 from mflux.models.anima.variants.txt2img.anima import Anima
+from mflux.models.common.compute_precision import ComputePrecision
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.resolution.config_resolution import ConfigResolution
 from mflux.utils.dimension_resolver import DimensionResolver
@@ -34,6 +35,7 @@ def build_parser() -> CommandLineParser:
     parser.add_model_arguments(require_model_arg=False, default_model=DEFAULT_MODEL)
     parser.add_lora_arguments()
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
+    parser.add_compute_precision_arguments()
     parser.add_output_arguments()
     # The command's sampler: er_sde (the model card's default) or euler.
     parser.set_defaults(scheduler=AnimaSampler.DEFAULT)
@@ -65,6 +67,7 @@ class AnimaCommand:
             model_config=AnimaCommand.validate(args),
             quantize=args.quantize,
             model_path=args.model_path,
+            compute_precision=ComputePrecision.dtype_for(args.compute_precision),
             **lora_init_kwargs_from_args(args),
         )
 

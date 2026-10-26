@@ -2,6 +2,7 @@ import mlx.core as mx
 from mlx import nn
 
 from mflux.models.anima.model.anima_transformer.anima_rope import AnimaRoPE
+from mflux.models.common.compute_precision import ComputePrecision
 
 
 class AnimaAttention(nn.Module):
@@ -17,8 +18,12 @@ class AnimaAttention(nn.Module):
         self.output_proj = nn.Linear(dim, dim, bias=False)
         self.q_norm = nn.RMSNorm(head_dim, eps=1e-6)
         self.k_norm = nn.RMSNorm(head_dim, eps=1e-6)
+        self.compute_precision = ComputePrecision()
 
     def __call__(self, x: mx.array, context: mx.array, rope: tuple[mx.array, mx.array] | None = None) -> mx.array:
+        precision = self.compute_precision
+        dtype = x.dtype
+        x, context = precision.to_compute(x), precision.to_compute(context)
         batch, seq_len, _ = x.shape
         q = self.q_norm(self.q_proj(x).reshape(batch, seq_len, self.num_heads, -1))
         k = self.k_norm(self.k_proj(context).reshape(batch, context.shape[1], self.num_heads, -1))
@@ -32,4 +37,5 @@ class AnimaAttention(nn.Module):
             v.transpose(0, 2, 1, 3),
             scale=q.shape[-1] ** -0.5,
         )
-        return self.output_proj(out.transpose(0, 2, 1, 3).reshape(batch, seq_len, -1))
+        out = self.output_proj(out.transpose(0, 2, 1, 3).reshape(batch, seq_len, -1))
+        return precision.to_stream(out, dtype)

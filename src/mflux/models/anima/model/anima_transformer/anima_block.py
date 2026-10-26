@@ -2,6 +2,7 @@ import mlx.core as mx
 from mlx import nn
 
 from mflux.models.anima.model.anima_transformer.anima_attention import AnimaAttention
+from mflux.models.common.compute_precision import ComputePrecision
 
 
 class AnimaFeedForward(nn.Module):
@@ -9,9 +10,14 @@ class AnimaFeedForward(nn.Module):
         super().__init__()
         self.layer1 = nn.Linear(dim, hidden_dim, bias=False)
         self.layer2 = nn.Linear(hidden_dim, dim, bias=False)
+        self.compute_precision = ComputePrecision()
 
     def __call__(self, x: mx.array) -> mx.array:
-        return self.layer2(nn.gelu(self.layer1(x)))
+        # Measured on the real weights, the activations stay under 1e3, so float16 needs no headroom here.
+        precision = self.compute_precision
+        dtype = x.dtype
+        out = self.layer2(nn.gelu(self.layer1(precision.to_compute(x))))
+        return precision.to_stream(out, dtype)
 
 
 class AnimaBlock(nn.Module):

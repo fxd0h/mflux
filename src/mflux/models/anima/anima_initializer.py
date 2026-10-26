@@ -7,6 +7,7 @@ from mflux.callbacks.callback_registry import CallbackRegistry
 from mflux.models.anima.model.anima_transformer.anima_transformer import AnimaTransformer
 from mflux.models.anima.weights.anima_lora_mapping import AnimaLoRAMapping
 from mflux.models.anima.weights.anima_weight_definition import AnimaWeightDefinition
+from mflux.models.common.compute_precision import ComputePrecision
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.tokenizer import TokenizerLoader
@@ -38,7 +39,9 @@ class AnimaInitializer:
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
         bake_lora: bool = True,
+        compute_precision: mx.Dtype | None = None,
     ) -> None:
+        precision = ComputePrecision(compute_precision)
         path = model_path or model_config.model_name
         AnimaInitializer._init_config(model, model_config)
         weights = AnimaInitializer._load_weights_and_tokenizers(model, model_config, path)
@@ -55,6 +58,10 @@ class AnimaInitializer:
         del weights
         mx.eval(model.parameters())
         mx.clear_cache()
+        model.compute_precision = precision
+        if compute_precision is not None:
+            # Last, so it casts the final parameters, whatever quantization and LoRA produced.
+            model.transformer.apply_compute_precision(precision)
 
     @staticmethod
     def is_upstream(path: str) -> bool:

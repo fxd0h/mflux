@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 import torch
 from mlx import nn
-from mlx.utils import tree_flatten, tree_unflatten
+from mlx.utils import tree_flatten, tree_map, tree_unflatten
 from torch import nn as tnn
 from torch.nn import functional as F
 
@@ -26,6 +26,7 @@ from mflux.models.anima.model.anima_transformer.anima_transformer import AnimaTr
 from mflux.models.anima.weights.anima_lora_mapping import AnimaLoRAMapping
 from mflux.models.anima.weights.anima_weight_definition import AnimaWeightDefinition
 from mflux.models.anima.weights.anima_weight_mapping import AnimaWeightMapping
+from mflux.models.common.compute_precision import ComputePrecision
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.tokenizer.tokenizer_output import TokenizerOutput
 from mflux.models.common.weights.mapping.weight_mapper import WeightMapper
@@ -254,6 +255,26 @@ class TestAnimaTransformer:
         out = model(mx.array(x[:, :, 0].numpy()), mx.array(sigma.numpy()), mx.array(context.numpy()))
 
         np.testing.assert_allclose(np.array(out), expected, rtol=2e-4, atol=2e-4)
+
+    def test_float16_compute_casts_the_blocks_only_and_keeps_the_output_close(self):
+        model = AnimaTransformer(dim=128, num_blocks=2, num_heads=2, context_dim=64, adaln_lora_dim=32)
+        model.update(tree_map(lambda v: v.astype(mx.bfloat16), model.parameters()))
+        mx.random.seed(3)
+        args = (mx.random.normal((1, 16, 12, 8)), mx.array([0.7]), mx.random.normal((1, 20, 64)).astype(mx.bfloat16))
+        reference = model(*args)
+
+        model.apply_compute_precision(ComputePrecision(mx.float16))
+        out = model(*args)
+
+        block = model.blocks[0]
+        for linear in (block.self_attn.q_proj, block.cross_attn.v_proj, block.mlp.layer2):
+            assert linear.weight.dtype == mx.float16
+        assert block.adaln_modulation_mlp[1].weight.dtype == mx.bfloat16
+        assert {v.dtype for _, v in tree_flatten(model.llm_adapter.parameters())} == {mx.bfloat16}
+        assert out.dtype == reference.dtype
+        np.testing.assert_allclose(
+            np.array(out.astype(mx.float32)), np.array(reference.astype(mx.float32)), atol=5e-2, rtol=5e-2
+        )
 
     def test_the_llm_adapter_matches_the_reference(self):
         reference = _RefAdapter(vocab=96, dim=64, layers=2, heads=4)
