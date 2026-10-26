@@ -57,6 +57,8 @@ STANDARD_QUANTS = ["q3", "q4", "q5", "q6", "q8", "bf16"]
 FLUX3_QUANTS = ["q4", "q6", "q8", "bf16"]
 # q4 and q8 are the levels checked on Iris-3B (load-time, mflux-save round trip, images inspected).
 IRIS_QUANTS = ["q4", "q8", "bf16"]
+# The levels checked on Anima (renders inspected, mflux-save round trip). -q 3 breaks its 2B transformer.
+ANIMA_QUANTS = ["q4", "q5", "q6", "q8", "bf16"]
 
 # key -> (model_type, model_family, model_sub_family, mflux_cli, mflux_cli_tools, status, quants)
 OVERLAY: dict[str, tuple[str, str, str, list[str], list[str], str, list[str] | None]] = {
@@ -353,6 +355,9 @@ OVERLAY: dict[str, tuple[str, str, str, list[str], list[str], str, list[str] | N
         "active",
         STANDARD_QUANTS,
     ),
+    "anima-turbo": ("image", "anima", "anima-turbo", ["mflux-generate-anima"], [], "active", ANIMA_QUANTS),
+    "anima-aesthetic": ("image", "anima", "anima-aesthetic", ["mflux-generate-anima"], [], "active", ANIMA_QUANTS),
+    "anima-base": ("image", "anima", "anima-base", ["mflux-generate-anima"], [], "active", ANIMA_QUANTS),
     "seedvr2-3b": ("video-upscale", "seedvr2", "seedvr2-3b", ["mflux-upscale-seedvr2"], [], "active", STANDARD_QUANTS),
     "seedvr2-7b": ("video-upscale", "seedvr2", "seedvr2-7b", ["mflux-upscale-seedvr2"], [], "active", STANDARD_QUANTS),
 }
