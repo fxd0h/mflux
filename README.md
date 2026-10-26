@@ -131,6 +131,7 @@ MFLUX supports the following model families. They have different strengths and w
 |[Lens](src/mflux/models/lens/README.md) | May 2026 | 3.8B (+20B TE) | Turbo (distilled) | No | Dual-stream MMDiT from Microsoft with a GPT-OSS text encoder. Strong prompt adherence in 4 steps. |
 |[Ming-Image](src/mflux/models/ming_image/README.md) | Sep 2026 | 6.15B (+16B MoE TE) | Base | No | Design-focused (posters, cards, UI) with strong typography; outputs RGBA. |
 |[MOSS-Image](src/mflux/models/moss_image/README.md) | Oct 2026 | 4.9B (+9B TE) | SFT & Base | No | Single-stream DiT from OpenMOSS with a Qwen3.5 text encoder. Takes natural-language, tag and JSON-layout prompts. Renders English and Chinese text. 50 steps with CFG, or 8 or 4 steps with a community step-distilled LoRA. |
+|[Anima](src/mflux/models/anima/README.md) | Jan 2026 | 2B (+0.6B TE) | Turbo (distilled), Aesthetic & Base | No | Anime and illustration model from CircleStone Labs and Comfy Org on Cosmos-Predict2, with a Qwen3 text encoder. Danbooru tags and natural language. 10 steps Turbo, 30 steps with CFG for Aesthetic and Base. |
 |[Boogu Image](src/mflux/models/boogu/README.md) | Jun 2026 | 10B | Turbo (distilled) | No | DMD-distilled 4-step model with a photographic look and bilingual (EN/ZH) text rendering. |
 |[FIBO](src/mflux/models/fibo/README.md) | Oct 2025+ | 8B | Distilled & Base | No | Very good JSON-based prompt understanding. Has edit capabilities. |
 |[SeedVR2](src/mflux/models/seedvr2/README.md) | Jun 2025 | 3B & 7B | — | No | Best upscaling model. |
@@ -311,6 +312,7 @@ MFLUX would not be possible without the great work of:
 - Microsoft for the Lens (Turbo) model, and Comfy-Org for the [weights repackage](https://huggingface.co/Comfy-Org/Lens)
 - inclusionAI for the [Ming-Image project](https://github.com/inclusionAI/Ming-Image)
 - OpenMOSS for the [MOSS-Image project](https://github.com/OpenMOSS/MOSS-Image)
+- CircleStone Labs and Comfy Org for the [Anima project](https://huggingface.co/circlestone-labs/Anima)
 - The Boogu team for the [Boogu Image project](https://huggingface.co/Boogu/Boogu-Image-0.1-Turbo)
 - ByteDance, @numz and @adrientoupet for the [SeedVR2 project](https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler)
 - Hugging Face for the [Diffusers library implementations](https://github.com/huggingface/diffusers) 
