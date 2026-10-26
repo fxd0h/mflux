@@ -41,6 +41,8 @@ class AnimaInitializer:
         bake_lora: bool = True,
         compute_precision: mx.Dtype | None = None,
     ) -> None:
+        if quantize == 3:
+            raise ValueError("Anima does not work with -q 3, the 2B transformer turns to noise. Use -q 4, 5, 6 or 8.")
         precision = ComputePrecision(compute_precision)
         path = model_path or model_config.model_name
         AnimaInitializer._init_config(model, model_config)

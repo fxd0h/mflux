@@ -435,6 +435,10 @@ class TestAnimaWeights:
         assert AnimaInitializer.is_upstream(AnimaWeightDefinition.REPO) and AnimaInitializer.is_upstream(str(copy))
         assert not AnimaInitializer.is_upstream(str(saved))
 
+    def test_three_bit_quantization_fails_before_any_weight_loads(self):
+        with pytest.raises(ValueError, match="-q 3"):
+            AnimaInitializer.init(model=None, model_config=None, quantize=3)
+
     def test_quantization_keeps_the_text_path_the_modulations_and_the_patch_embedding_dense(self):
         model = AnimaTransformer(dim=128, num_blocks=1, num_heads=2, context_dim=64, adaln_lora_dim=64)
 
@@ -480,10 +484,9 @@ class TestAnimaLoRAMapping:
         # The layout of kohya's networks.lora_anima: ten layers per block, alpha beside each pair.
         model = AnimaTransformer(dim=128, num_blocks=2, num_heads=2, context_dim=64, adaln_lora_dim=32)
         layers = [f"{attn}.{proj}" for attn in ("self_attn", "cross_attn") for proj in ("q_proj", "k_proj", "v_proj", "output_proj")]  # fmt: off
+        targets = [f"blocks.{block}.{layer}" for block in range(2) for layer in [*layers, "mlp.layer1", "mlp.layer2"]]
         weights = {}
-        for path in [
-            f"blocks.{block}.{layer}" for block in range(2) for layer in [*layers, "mlp.layer1", "mlp.layer2"]
-        ]:
+        for path in targets:
             out_dim, in_dim = _module_at(model, path).weight.shape
             name = f"lora_unet_{path.replace('.', '_')}"
             weights[f"{name}.lora_down.weight"] = mx.full((4, in_dim), 0.01)
@@ -491,7 +494,7 @@ class TestAnimaLoRAMapping:
             weights[f"{name}.alpha"] = mx.array(4.0)
         lora_file = tmp_path / "anima_style.safetensors"
         mx.save_safetensors(str(lora_file), weights)
-        before = {path: _module_at(model, path).weight for path in ("blocks.0.self_attn.q_proj", "blocks.1.mlp.layer2")}
+        before = {path: _module_at(model, path).weight for path in targets}
 
         paths, scales = LoRALoader.load_and_apply_lora(AnimaLoRAMapping.get_mapping(), model, [str(lora_file)], [1.0])
 

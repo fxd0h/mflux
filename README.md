@@ -153,7 +153,7 @@ MFlux supports a small number of schedulers - see;<br>
 - Quantization and local model loading
 - LoRA support (multi-LoRA, scales, library lookup), including LyCORIS LoKr on FLUX.1 and FLUX.2
 - Metadata export + reuse, plus prompt file support
-- Float16 compute for Apple M1-family GPUs on FLUX.2, FLUX 3 Image Klein, Z-Image and Qwen-Image 2.1 (`--compute-precision float16`, see the [common README](src/mflux/models/common/README.md#float16-compute-apple-m1-family))
+- Float16 compute for Apple M1-family GPUs on FLUX.2, FLUX 3 Image Klein, Z-Image, Qwen-Image 2.1 and Anima (`--compute-precision float16`, see the [common README](src/mflux/models/common/README.md#float16-compute-apple-m1-family))
 
 **Model-specific highlights**
 - Text-to-image and image-to-image generation.

@@ -76,6 +76,14 @@ mflux-generate-anima --model ~/models/Anima-aesthetic-mflux-q8 --prompt "masterp
 A saved folder holds the transformer, the text encoder, the VAE and both tokenizers. The command picks the variant
 from the folder name (`aesthetic`, `base`, otherwise Turbo); `--base-model anima-base` names it explicitly.
 
+Saved checkpoints of the three variants are on Hugging Face as `mflux-community/anima-<variant>-mflux-<level>`,
+with `<variant>` one of `turbo`, `aesthetic`, `base` and `<level>` one of `4`, `5`, `6`, `8`, `bf16`. The repo name
+picks the variant the same way:
+
+```sh
+mflux-generate-anima --model mflux-community/anima-aesthetic-mflux-4 --prompt "masterpiece, best quality, safe, 1girl, smile"
+```
+
 Measured on an M5 Max at 1024x1024 with the defaults above (one warm-up image first):
 
 | Model | Weights | Time per step | Time per image | Peak while denoising | Peak with VAE decode |
