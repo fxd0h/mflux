@@ -510,6 +510,8 @@ class CommandLineParser(argparse.ArgumentParser):
                     and parameter in prior_gen_metadata
                     and not self._option_was_provided(f"--{option}", f"--no-{option}")
                 ):
+                    if parameter == "bake_lora" and not isinstance(prior_gen_metadata[parameter], bool):
+                        self.error(f"bake_lora in --config-from-conf: {prior_gen_metadata[parameter]!r} is not true or false.")  # fmt: off
                     setattr(namespace, parameter, prior_gen_metadata[parameter])
             # Step reuse changes the image, so a sidecar that recorded it replays it.
             if (

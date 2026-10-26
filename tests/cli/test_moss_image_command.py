@@ -360,6 +360,16 @@ def test_a_sidecar_replays_its_bake_choice_unless_the_flag_overrides_it(
 
 
 @pytest.mark.fast
+def test_a_sidecar_with_a_non_boolean_bake_choice_fails_before_the_model_loads(monkeypatch, tmp_path):
+    sidecar = tmp_path / "run.metadata.json"
+    sidecar.write_text(json.dumps({"prompt": "a puffin", "bake_lora": "false"}))
+    monkeypatch.setattr(sys, "argv", ["mflux-generate-moss-image", "--config-from-metadata", str(sidecar)])
+    with pytest.raises(SystemExit):
+        cli.main()
+    assert FakeMOSSImage.instances == []
+
+
+@pytest.mark.fast
 def test_a_sidecar_with_bad_skip_layers_fails_before_the_model_loads(monkeypatch, tmp_path):
     sidecar = tmp_path / "run.metadata.json"
     sidecar.write_text(json.dumps({"prompt": "a puffin", "uncond_skip_layers": "22"}))
