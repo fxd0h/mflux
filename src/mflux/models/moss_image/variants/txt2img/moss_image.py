@@ -50,6 +50,7 @@ class MOSSImage(nn.Module):
             lora_scales=lora_scales,
             bake_lora=bake_lora,
         )
+        self.bake_lora = bake_lora
 
     def generate_image(
         self,
@@ -114,6 +115,8 @@ class MOSSImage(nn.Module):
                 **step_cache.generation_parameters(step_cache_ratio),
                 # The layer skip changes the image, so the metadata records it for --config-from-metadata.
                 "uncond_skip_layers": sorted(skip_layers),
+                # Merged and runtime LoRAs give different images, so a LoRA run records which one it used.
+                **({"bake_lora": self.bake_lora} if self.lora_paths else {}),
             },
         )
 

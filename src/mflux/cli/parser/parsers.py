@@ -503,7 +503,7 @@ class CommandLineParser(argparse.ArgumentParser):
                 namespace.height = prior_gen_metadata.get("height") or namespace.height
             if hasattr(namespace, "width") and not self._option_was_provided("--width"):
                 namespace.width = prior_gen_metadata.get("width") or namespace.width
-            for parameter in ("use_kv_cache", "output_resolution"):
+            for parameter in ("use_kv_cache", "output_resolution", "bake_lora"):
                 option = parameter.replace("_", "-")
                 if (
                     hasattr(namespace, parameter)

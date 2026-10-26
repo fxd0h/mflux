@@ -349,6 +349,17 @@ def test_a_sidecar_replays_its_skip_layers_unless_the_flag_overrides_them(
 
 
 @pytest.mark.fast
+@pytest.mark.parametrize(("recorded", "argv", "expected"), [({}, [], False), ({"bake_lora": True}, [], True), ({"bake_lora": True}, ["--no-bake-lora"], False), ({"bake_lora": False}, ["--bake-lora"], True)])  # fmt: skip
+def test_a_sidecar_replays_its_bake_choice_unless_the_flag_overrides_it(
+    monkeypatch, tmp_path, recorded, argv, expected
+):
+    sidecar = tmp_path / "run.metadata.json"
+    sidecar.write_text(json.dumps({"prompt": "a puffin", "seed": 7, **recorded}))
+    model = run_main(monkeypatch, ["--config-from-metadata", str(sidecar), *argv])
+    assert model.init_kwargs["bake_lora"] is expected
+
+
+@pytest.mark.fast
 def test_a_sidecar_with_bad_skip_layers_fails_before_the_model_loads(monkeypatch, tmp_path):
     sidecar = tmp_path / "run.metadata.json"
     sidecar.write_text(json.dumps({"prompt": "a puffin", "uncond_skip_layers": "22"}))
