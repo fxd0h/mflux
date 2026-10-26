@@ -85,6 +85,16 @@ class TestAnimaGenerateCli:
             run_cli("--scheduler", "dpmpp_2m")
         assert _StubAnima.instances == []
 
+    @pytest.mark.parametrize("steps", ["0", "1001"])
+    def test_a_step_count_outside_the_schedule_fails_before_the_model_loads(self, run_cli, steps):
+        with pytest.raises(ValueError, match="1 to 1000 steps"):
+            run_cli("--steps", steps)
+        assert _StubAnima.instances == []
+
+    def test_a_scaled_size_is_refused_since_there_is_no_image_to_scale(self, run_cli):
+        with pytest.raises(SystemExit):
+            run_cli("--width", "2x")
+
     def test_a_size_that_is_not_a_multiple_of_16_fails_before_the_model_loads(self, run_cli):
         with pytest.raises(ValueError, match="multiples of 16"):
             run_cli("--width", "1000")

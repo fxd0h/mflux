@@ -4,7 +4,7 @@ from argparse import Namespace
 from mflux.callbacks.callback_manager import CallbackManager
 from mflux.cli.parser.parsers import CommandLineParser, lora_init_kwargs_from_args
 from mflux.models.anima.latent_creator.anima_latent_creator import AnimaLatentCreator
-from mflux.models.anima.model.anima_scheduler import AnimaSampler
+from mflux.models.anima.model.anima_scheduler import AnimaSampler, AnimaScheduler
 from mflux.models.anima.variants.txt2img.anima import Anima
 from mflux.models.common.compute_precision import ComputePrecision
 from mflux.models.common.config.model_config import ModelConfig
@@ -34,7 +34,7 @@ def build_parser() -> CommandLineParser:
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False, default_model=DEFAULT_MODEL)
     parser.add_lora_arguments()
-    parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
+    parser.add_image_generator_arguments(supports_metadata_config=True)
     parser.add_compute_precision_arguments()
     parser.add_output_arguments()
     # The command's sampler: er_sde (the model card's default) or euler.
@@ -57,6 +57,8 @@ class AnimaCommand:
             base_model=args.base_model,
         )
         AnimaSampler.resolve(args.scheduler)
+        if args.steps is not None:
+            AnimaScheduler.check_steps(args.steps)
         width, height = DimensionResolver.resolve(width=args.width, height=args.height, reference_image_path=None)
         AnimaLatentCreator.check_size(height=height, width=width)
         return model_config

@@ -34,13 +34,18 @@ class AnimaScheduler(BaseScheduler):
 
     @staticmethod
     def compute_sigmas(num_inference_steps: int) -> mx.array:
-        if num_inference_steps < 1:
-            raise ValueError(f"Anima needs at least 1 step, got {num_inference_steps}.")
+        AnimaScheduler.check_steps(num_inference_steps)
         total = AnimaScheduler.NUM_TRAIN_TIMESTEPS
         grid = AnimaScheduler.shift(np.arange(1, total + 1, dtype=np.float32) / np.float32(total))
         stride = total / num_inference_steps
         picks = [grid[-(1 + int(i * stride))] for i in range(num_inference_steps)]
         return mx.array(np.array([*picks, 0.0], dtype=np.float32))
+
+    @staticmethod
+    def check_steps(num_inference_steps: int) -> None:
+        # The schedule picks from 1000 grid points: more steps would repeat a sigma, and er_sde divides by the gap.
+        if not 1 <= num_inference_steps <= AnimaScheduler.NUM_TRAIN_TIMESTEPS:
+            raise ValueError(f"Anima takes 1 to {AnimaScheduler.NUM_TRAIN_TIMESTEPS} steps, got {num_inference_steps}.")
 
     @staticmethod
     def shift(t: np.ndarray) -> np.ndarray:
