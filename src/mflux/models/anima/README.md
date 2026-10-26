@@ -77,11 +77,11 @@ A saved folder holds the transformer, the text encoder, the VAE and both tokeniz
 from the folder name (`aesthetic`, `base`, otherwise Turbo); `--base-model anima-base` names it explicitly.
 
 Saved checkpoints of the three variants are on Hugging Face as `mflux-community/anima-<variant>-mflux-<level>`,
-with `<variant>` one of `turbo`, `aesthetic`, `base` and `<level>` one of `4`, `5`, `6`, `8`, `bf16`. The repo name
+with `<variant>` one of `turbo`, `aesthetic`, `base` and `<level>` one of `q4`, `q5`, `q6`, `q8`, `bf16`. The repo name
 picks the variant the same way:
 
 ```sh
-mflux-generate-anima --model mflux-community/anima-aesthetic-mflux-4 --prompt "masterpiece, best quality, safe, 1girl, smile"
+mflux-generate-anima --model mflux-community/anima-aesthetic-mflux-q4 --prompt "masterpiece, best quality, safe, 1girl, smile"
 ```
 
 Measured on an M5 Max at 1024x1024 with the defaults above (one warm-up image first):
