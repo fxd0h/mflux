@@ -155,8 +155,9 @@ mflux-train --config /path/to/train_anima.json
 ```
 
 The LoRA is saved with ComfyUI's keys (`diffusion_model.blocks.N...`), the same ones ai-toolkit writes, so it loads
-in mflux, ComfyUI and ai-toolkit. Add `"cache_limit_gb": 2` to the config to keep MLX from holding freed buffers;
-without it the run reaches the same speed with a higher peak.
+in mflux, ComfyUI and ai-toolkit. The example sets `"gradient_checkpointing": true` and `"cache_limit_gb": 2`, which
+keep the peak at about 11 GB; without them the run is faster (0.49 s a step) and peaks at 13.2 GB, and without the
+cache limit MLX keeps freed buffers and the peak reaches 17.9 GB.
 
 Measured on an M5 Max with the same 12 images, 300 steps at 512, rank 16, against ai-toolkit (73ebae1, MPS,
 gradient checkpointing on, its default):

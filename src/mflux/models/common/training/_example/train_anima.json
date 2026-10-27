@@ -7,6 +7,8 @@
   "quantize": null,
   "max_resolution": 512,
   "low_ram": false,
+  "gradient_checkpointing": true,
+  "cache_limit_gb": 2,
   "training_loop": {
     "num_epochs": 25,
     "batch_size": 1
