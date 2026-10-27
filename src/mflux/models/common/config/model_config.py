@@ -821,7 +821,7 @@ AVAILABLE_MODELS = {
     ),
     "fibo2": ModelConfig(
         priority=38,
-        aliases=["fibo2", "fibo-2.0-dev"],
+        aliases=["fibo2", "fibo-2.0-dev", "fibo-2-0-dev"],
         model_name="briaai/Fibo-2.0-dev",
         base_model=None,
         controlnet_model=None,
@@ -833,7 +833,7 @@ AVAILABLE_MODELS = {
     ),
     "fibo2-edit-turbo": ModelConfig(
         priority=39,
-        aliases=["fibo2-edit-turbo", "fibo-2-edit-turbo", "fibo-2.0-edit-turbo"],
+        aliases=["fibo2-edit-turbo", "fibo-2-edit-turbo", "fibo-2.0-edit-turbo", "fibo-2-0-edit-turbo"],
         model_name="briaai/Fibo-2.0-edit-turbo",
         base_model=None,
         controlnet_model=None,
@@ -1053,7 +1053,7 @@ AVAILABLE_MODELS = {
     ),
     "qwen-image-2.1": ModelConfig(
         priority=29,
-        aliases=["qwen-image-2.1", "qwen-2.1", "qwen-image-21"],
+        aliases=["qwen-image-2.1", "qwen-2.1", "qwen-image-21", "qwen-image-2-1"],
         model_name="Qwen/Qwen-Image-2.1",
         base_model=None,
         controlnet_model=None,
@@ -1071,7 +1071,13 @@ AVAILABLE_MODELS = {
         # samples on the fixed sigma nodes in its model_index.json (see Qwen21TurboScheduler),
         # not on a shifted linspace. It runs without CFG.
         priority=32,
-        aliases=["qwen-image-2.1-turbo", "qwen-2.1-turbo", "qwen-image-21-turbo", "qwen-image-turbo-21"],
+        aliases=[
+            "qwen-image-2.1-turbo",
+            "qwen-2.1-turbo",
+            "qwen-image-21-turbo",
+            "qwen-image-turbo-21",
+            "qwen-image-2-1-turbo",
+        ],
         model_name="Qwen/Qwen-Image-2.1-Turbo",
         base_model=None,
         controlnet_model=None,
@@ -1084,7 +1090,12 @@ AVAILABLE_MODELS = {
     "qwen-image-2.1-controlnet-union": ModelConfig(
         # The base model with alibaba-pai's Fun ControlNet-Union branch beside it.
         priority=31,
-        aliases=["qwen-image-2.1-controlnet-union", "qwen-image-2.1-controlnet", "qwen-2.1-controlnet"],
+        aliases=[
+            "qwen-image-2.1-controlnet-union",
+            "qwen-image-2.1-controlnet",
+            "qwen-2.1-controlnet",
+            "qwen-image-2-1-controlnet-union",
+        ],
         model_name="Qwen/Qwen-Image-2.1",
         base_model=None,
         controlnet_model="alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union",
