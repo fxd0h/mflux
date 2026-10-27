@@ -172,7 +172,8 @@ gradient checkpointing on, its default):
 
 Three LoRAs from each trainer on a blueprint style, scored on 3 prompts and 2 seeds by the share of pixels in the
 dataset's blueprint blue (0.91 on the training images, 0.14 without a LoRA): mflux 0.91, 0.92 and 0.90, every image
-in the style, the unseen lighthouse included; ai-toolkit 0.66, 0.44 and 0.16, from one run to the next. Applied
+in the style, the unseen lighthouse included; ai-toolkit 0.66, 0.44 and 0.16, from one run to the next. This is
+one style dataset; character LoRAs, where the low-noise steps matter more, are not measured yet. Applied
 to the same states step by step,
 mflux and ComfyUI agree within 4% with either LoRA (the bfloat16 difference without a LoRA), against 35 to 39%
 when mflux runs without it.
