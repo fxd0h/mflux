@@ -17,6 +17,7 @@ from mflux.models.common.training.state.training_spec import TrainingSpec
 from mflux.models.common.training.utils import TrainingUtil
 from mflux.models.common.vae.vae_util import VAEUtil
 from mflux.models.fibo2.latent_creator.fibo2_latent_creator import Fibo2LatentCreator
+from mflux.models.fibo2.model.fibo2_text_encoder.prompt_encoder import Fibo2PromptEncoder
 from mflux.models.fibo2.training_adapter.fibo2_comfy_lora import Fibo2ComfyLoRA
 from mflux.models.fibo2.variants.fibo2_core import _Fibo2Core
 from mflux.models.fibo2.variants.txt2img.fibo2 import Fibo2
@@ -67,7 +68,8 @@ class Fibo2TrainingAdapter(TrainingAdapter):
     def freeze_base(self) -> None:
         self._fibo2.vae.freeze()
         self._fibo2.transformer.freeze()
-        self._fibo2.text_encoder.freeze()
+        if self._fibo2.text_encoder is not None:  # gone after release_text_encoder
+            self._fibo2.text_encoder.freeze()
 
     def set_gradient_checkpointing(self, enabled: bool) -> None:
         self._fibo2.transformer.gradient_checkpointing = enabled
@@ -117,6 +119,8 @@ class Fibo2TrainingAdapter(TrainingAdapter):
         steps: int,
         image_paths: list[Path | str] | None = None,  # noqa: ARG002
     ):
+        # After release_text_encoder, the prompts come from the encodings kept then
+        self._fibo2.prompt_cache = dict(getattr(self, "_preview_embeds", {}))
         with TrainingUtil.assistant_disabled(self._fibo2.transformer):
             image = self._fibo2.generate_image(
                 seed=seed,
@@ -160,6 +164,27 @@ class Fibo2TrainingAdapter(TrainingAdapter):
             role="assistant",
             bake_lora=False,
         )
+
+    def release_text_encoder(self, training_spec: TrainingSpec) -> bool:
+        # Encodes the preview prompts (and the default negative when guidance is on) now, keeps them on the adapter, and
+        # drops the text encoder. A preview caption that draws text images needs the encoder at every run, so then it
+        # stays. The encodings live here, not in the model's prompt cache, which training would treat as parameters.
+        monitoring = training_spec.monitoring
+        prompts = list(monitoring.preview_prompts) if monitoring is not None else []
+        if any(
+            self._fibo2._text_images(Fibo2PromptEncoder.caption(Fibo2PromptEncoder.format_prompt(prompt)))
+            for prompt in prompts
+        ):
+            return False
+        for prompt in prompts:
+            self._fibo2._encode_prompts(prompt, None, None, render_text_images=True)
+        if training_spec.guidance is not None and training_spec.guidance > 1.0:
+            self._fibo2._encode_prompt(Fibo2PromptEncoder.TEXT_TO_IMAGE_NEGATIVE)
+        self._preview_embeds = dict(self._fibo2.prompt_cache)
+        mx.eval(list(self._preview_embeds.values()))
+        self._clear_prompt_cache()
+        self._fibo2.text_encoder = None
+        return True
 
     def _clear_prompt_cache(self) -> None:
         # The model is a module, so arrays left in its prompt cache would be trained and decayed with the LoRA

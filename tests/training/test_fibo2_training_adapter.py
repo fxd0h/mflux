@@ -279,3 +279,45 @@ def test_previews_use_the_training_guidance_and_leave_no_cached_prompts(monkeypa
     assert adapter._fibo2.generate_kwargs["num_inference_steps"] == 6
     # Arrays in the model's prompt cache would be parameters the optimizer trains and decays
     assert adapter._fibo2.prompt_cache == {}
+
+
+def _with_prompt_encoding(adapter):
+    # The parts of Fibo2 the release uses: a caption with text_render draws text images, the rest is cached by text
+    model = adapter.model()
+    model.encoded = []
+
+    def encode(prompt, images=None):
+        model.encoded.append(prompt)
+        model.prompt_cache.setdefault(prompt, mx.full((2,), float(len(model.encoded))))
+        return model.prompt_cache[prompt]
+
+    model._encode_prompt = encode
+    model._encode_prompts = lambda prompt, images, text_encoder_images, render_text_images: (encode(prompt), None)
+    model._text_images = lambda caption: ["text"] if isinstance(caption, dict) and caption.get("text_render") else []
+    return model
+
+
+def test_the_text_encoder_is_released_and_previews_use_the_kept_encodings(monkeypatch):
+    adapter = _Fake.adapter(monkeypatch)
+    model = _with_prompt_encoding(adapter)
+    spec = SimpleNamespace(guidance=5.0, monitoring=SimpleNamespace(preview_prompts=["a bluxyz drawing of a lighthouse"]))  # fmt: off
+
+    assert adapter.release_text_encoder(spec)
+
+    assert model.text_encoder is None
+    assert model.prompt_cache == {}  # nothing left in the module, which training would treat as parameters
+    seen = {}
+    model.generate_image = lambda **kwargs: seen.update(cache=dict(model.prompt_cache)) or SimpleNamespace(image="img")
+    adapter.generate_preview_image(seed=1, prompt="a bluxyz drawing of a lighthouse", width=64, height=64, steps=2)
+    assert len(seen["cache"]) == 2  # the preview prompt and the default negative, encoded before the release
+    assert model.prompt_cache == {}
+
+
+def test_a_preview_that_draws_text_keeps_the_text_encoder(monkeypatch):
+    adapter = _Fake.adapter(monkeypatch)
+    model = _with_prompt_encoding(adapter)
+    caption = '{"short_description": "a sign", "text_render": [{"text": "OPEN"}]}'
+    spec = SimpleNamespace(guidance=5.0, monitoring=SimpleNamespace(preview_prompts=[caption]))
+
+    assert not adapter.release_text_encoder(spec)
+    assert model.text_encoder is not None

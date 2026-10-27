@@ -204,6 +204,12 @@ class TrainingRunner:
                     )
                 )
             dataset = Dataset(encoded_data)
+        # With the dataset encoded, an adapter that can serve its previews from prompts encoded now lets its text
+        # encoder go: training never runs it again (FIBO 2's Qwen3-VL is 8.7 GB)
+        release_text_encoder = getattr(adapter, "release_text_encoder", None)
+        if release_text_encoder is not None and release_text_encoder(training_spec):
+            gc.collect()
+            mx.clear_cache()
         iterator = Iterator.from_spec(training_spec=training_spec, dataset=dataset)
         optimizer = Optimizer.from_spec(training_spec)
         statistics = Statistics.from_spec(training_spec)
