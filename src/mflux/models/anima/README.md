@@ -167,7 +167,9 @@ gradient checkpointing on, its default):
 | mflux, `gradient_checkpointing` and `cache_limit_gb: 2` | 0.61 s | 3:04 | 208 s | 11.2 GB |
 | mflux, `cache_limit_gb: 2` | 0.49 s | 2:27 | 171 s | 13.2 GB |
 
-A LoRA from either trainer gives the same style on the same seeds. Applied to the same states step by step,
+On the same seeds, the mflux LoRA applied the style more strongly and more evenly than the ai-toolkit one in this
+run (one run each, so this can be run-to-run variance or the different timestep sampling). Applied to the same
+states step by step,
 mflux and ComfyUI agree within 4% with either LoRA (the bfloat16 difference without a LoRA), against 35 to 39%
 when mflux runs without it.
 
