@@ -112,3 +112,44 @@ class TestFibo2ComfyFusedKeys:
         assert gate.shape == (hidden, rank) and float(gate.min()) == 1.0
         assert up_part.shape == (hidden, rank) and float(up_part.min()) == 2.0
         assert Fibo2LoRAMapping._unpad_down(mx.ones((rank, padded))).shape == (rank, hidden)
+
+    def test_kohya_names_norm_and_bias_patches_load_end_to_end(self, tmp_path):
+        # A kohya file (lora_down/lora_up, alpha), a norm .diff under ComfyUI's q_norm name and a .diff_b on a biased
+        # layer, loaded and baked at scale 0.5 on the small transformer
+        import mlx.core as mx
+
+        transformer = Fibo2Transformer(dim=128, n_heads=2, n_layers=1, cap_feat_dim=128, injection_layer_ids=(0,), axes_dims=(16, 24, 24))  # fmt: off
+        block = transformer.layers[0]
+        rank, scale = 4, 0.5
+        down = mx.random.normal((rank, 128), key=mx.random.key(0))
+        up = mx.random.normal((128, rank), key=mx.random.key(1))
+        norm_diff = mx.random.normal(block.attention.norm_q.weight.shape, key=mx.random.key(2))
+        bias_diff = mx.random.normal(block.adaLN_modulation[0].bias.shape, key=mx.random.key(3))
+        before_out = block.attention.to_out[0].weight
+        before_norm = block.attention.norm_q.weight
+        before_bias = block.adaLN_modulation[0].bias
+        path = tmp_path / "kohya_fibo2.safetensors"
+        mx.save_safetensors(str(path), {
+            "diffusion_model.layers.0.attention.out.lora_down.weight": down,
+            "diffusion_model.layers.0.attention.out.lora_up.weight": up,
+            "diffusion_model.layers.0.attention.out.alpha": mx.array(float(rank)),
+            "diffusion_model.layers.0.attention.q_norm.diff": norm_diff,
+            "diffusion_model.layers.0.adaLN_modulation.0.diff_b": bias_diff,
+        })  # fmt: off
+
+        LoRALoader.load_and_apply_lora(
+            Fibo2LoRAMapping.get_mapping(), transformer, [str(path)], [scale], bake_lora=True
+        )
+
+        block = transformer.layers[0]
+        assert mx.allclose(block.attention.to_out[0].weight - before_out, scale * (up @ down), atol=2e-2).item()
+        assert mx.allclose(block.attention.norm_q.weight - before_norm, scale * norm_diff, atol=2e-2).item()
+        assert mx.allclose(block.adaLN_modulation[0].bias - before_bias, scale * bias_diff, atol=2e-2).item()
+
+    def test_every_w2_target_drops_comfyui_padding(self):
+        w2 = [t for t in Fibo2LoRAMapping.get_mapping() if t.model_path.endswith(("feed_forward.w2", "ffn.w2"))]
+        assert w2 and all(t.down_transform is Fibo2LoRAMapping._unpad_down for t in w2)
+
+    def test_the_final_norm_takes_no_patch(self):
+        # final_layer.norm is a LayerNorm without weight: a patch target there would stop the whole load
+        assert not any(t.model_path == "final_layer.norm" for t in Fibo2LoRAMapping.get_mapping())

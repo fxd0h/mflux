@@ -54,7 +54,8 @@ class Fibo2LoRAMapping:
         names += [(f"{stack}.attention.norm_{x}", f"{stack}.attention.{x}_norm") for stack in ("noise_refiner.{block}", "layers.{block}") for x in "qk"]  # fmt: off
         names += [(f"layers.{{block}}.{norm}", f"layers.{{block}}.{norm}") for norm in ("cross_attn_norm1", "cross_attn_norm2", "cross_attention.norm_q", "cross_attention.norm_k")]  # fmt: off
         names += [(f"perceiver.layers.{{block}}.{norm}", f"perceiver.layers.{{block}}.{norm}") for norm in ("cross_attn_norm", "self_attn_norm", "ffn_norm", "cross_attention.norm_q", "cross_attention.norm_k", "self_attention.norm_q", "self_attention.norm_k")]  # fmt: off
-        names += [("perceiver.norm_out", "perceiver.norm_out"), ("final_layer.norm", "final_layer.norm")]
+        # final_layer.norm has no weight (LayerNorm without affine), so it takes no patch
+        names += [("perceiver.norm_out", "perceiver.norm_out")]
         prefixes = Fibo2LoRAMapping.PREFIXES
         return [
             LoRATarget(
