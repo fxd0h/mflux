@@ -59,6 +59,8 @@ FLUX3_QUANTS = ["q4", "q6", "q8", "bf16"]
 IRIS_QUANTS = ["q4", "q8", "bf16"]
 # The levels checked on Anima (renders inspected, mflux-save round trip). -q 3 breaks its 2B transformer.
 ANIMA_QUANTS = ["q4", "q5", "q6", "q8", "bf16"]
+# q4, q6 and q8 are the levels checked on FIBO 2 (mflux-save round trip, images inspected).
+FIBO2_QUANTS = ["q4", "q6", "q8", "bf16"]
 
 # key -> (model_type, model_family, model_sub_family, mflux_cli, mflux_cli_tools, status, quants)
 OVERLAY: dict[str, tuple[str, str, str, list[str], list[str], str, list[str] | None]] = {
@@ -272,6 +274,16 @@ OVERLAY: dict[str, tuple[str, str, str, list[str], list[str], str, list[str] | N
         "active",
         None,
     ),
+    "fibo2": (
+        "image",
+        "fibo",
+        "fibo2",
+        ["mflux-generate-fibo2", "mflux-generate-fibo2-edit"],
+        [],
+        "active",
+        FIBO2_QUANTS,
+    ),
+    "fibo2-edit-turbo": ("image", "fibo", "fibo2", ["mflux-generate-fibo2-edit"], [], "active", None),
     "z-image": ("image", "z-image", "z-image", ["mflux-generate-z-image"], [], "active", STANDARD_QUANTS),
     "z-image-turbo": (
         "image",
