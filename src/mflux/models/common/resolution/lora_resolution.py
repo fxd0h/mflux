@@ -1,7 +1,9 @@
+import hashlib
 import logging
 import os
 import shutil
 from pathlib import Path
+from urllib.parse import quote
 
 from huggingface_hub import snapshot_download
 from huggingface_hub.utils import LocalEntryNotFoundError
@@ -121,8 +123,14 @@ class LoraResolution:
     @staticmethod
     def _link_name(repo_id: str, filename: str) -> str:
         # One link per repo and file, so two repos with the same file name (MOSS's turbo LoRAs are both
-        # lora.safetensors) never resolve to each other's file
-        return f"{repo_id.replace('/', '--')}--{filename.replace('/', '--')}"
+        # lora.safetensors) never resolve to each other's file. Hub repo names can't contain "--", and the file name is
+        # percent-encoded, so no two (repo, file) pairs share a name. A name past 200 bytes keeps its start and a hash,
+        # under the 255-byte limit of most file systems.
+        name = f"{repo_id.replace('/', '--')}--{quote(filename, safe='')}"
+        if len(name.encode()) <= 200:
+            return name
+        digest = hashlib.sha1(name.encode()).hexdigest()[:16]
+        return f"{name.encode()[:150].decode(errors='ignore')}-{digest}{Path(filename).suffix}"
 
     @staticmethod
     def _linked_collection_path(repo_id: str, filename: str) -> str | None:

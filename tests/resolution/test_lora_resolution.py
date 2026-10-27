@@ -359,3 +359,21 @@ class TestLoraResolutionRelativePaths:
         result = LoraResolution.resolve(path="./subdir/style.safetensors")
 
         assert "style.safetensors" in result
+
+
+class TestLoraResolutionLinkNames:
+    @pytest.mark.fast
+    def test_a_subfolder_and_a_hyphenated_file_get_different_links(self):
+        a = LoraResolution._link_name("org/repo", "sub/lora.safetensors")
+        b = LoraResolution._link_name("org/repo", "sub--lora.safetensors")
+        assert a != b
+
+    @pytest.mark.fast
+    def test_a_plain_file_keeps_a_readable_link(self):
+        assert LoraResolution._link_name("org/repo", "lora.safetensors") == "org--repo--lora.safetensors"
+
+    @pytest.mark.fast
+    def test_a_long_file_name_stays_under_the_file_system_limit(self):
+        name = LoraResolution._link_name("some-org/some-repo", "x" * 300 + ".safetensors")
+        assert len(name.encode()) <= 255 and name.endswith(".safetensors")
+        assert name != LoraResolution._link_name("some-org/some-repo", "x" * 299 + "y.safetensors")
