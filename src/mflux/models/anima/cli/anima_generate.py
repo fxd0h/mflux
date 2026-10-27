@@ -58,7 +58,7 @@ class AnimaCommand:
             base_model=args.base_model,
         )
         AnimaSampler.resolve(args.scheduler)
-        AnimaCommand._check_prompt_weights(args)
+        AnimaCommand._check_prompt_weights(args, model_config)
         if args.steps is not None:
             AnimaScheduler.check_steps(args.steps)
         width, height = DimensionResolver.resolve(width=args.width, height=args.height, reference_image_path=None)
@@ -66,7 +66,7 @@ class AnimaCommand:
         return model_config
 
     @staticmethod
-    def _check_prompt_weights(args: Namespace) -> None:
+    def _check_prompt_weights(args: Namespace, model_config: ModelConfig) -> None:
         # Parse the text the encoders will read, so a bad weight fails before the weights load. A prompt from stdin
         # ("-") can be read once only; generate() checks it. A prompt file that cannot be read is reported by main().
         prompt = getattr(args, "prompt", None)
@@ -77,8 +77,10 @@ class AnimaCommand:
                 prompt = None
         if isinstance(prompt, str) and prompt != "-":
             AnimaPromptWeights.parse(prompt)
+        # The negative prompt is encoded only when the guidance is not 1.0; otherwise it is ignored.
+        guidance = Anima.DEFAULT_GUIDANCE[model_config.aliases[0]] if args.guidance is None else float(args.guidance)
         negative_prompt = getattr(args, "negative_prompt", None)
-        if isinstance(negative_prompt, str):
+        if guidance != 1.0 and isinstance(negative_prompt, str):
             AnimaPromptWeights.parse(negative_prompt)
 
     @staticmethod

@@ -19,6 +19,7 @@ from mflux.models.common.resolution.config_resolution import ConfigResolution
 class _StubAnima:
     # Records what the CLI hands the model instead of loading the weights.
     instances: list = []
+    DEFAULT_GUIDANCE = Anima.DEFAULT_GUIDANCE
 
     def __init__(self, **kwargs):
         self.kwargs = kwargs
@@ -230,9 +231,16 @@ class TestAnimaReplayGuards:
             anima_generate.main()
         assert _StubAnima.instances == []
 
+    def test_a_negative_prompt_is_not_checked_at_guidance_1(self, monkeypatch):
+        argv = ["mflux-generate-anima", "--prompt", "cat", "--negative-prompt", "(x:nan)", "--seed", "1"]
+        monkeypatch.setattr(sys, "argv", argv)
+        monkeypatch.setattr(anima_generate, "Anima", _StubAnima)
+        _StubAnima.instances.clear()
+        anima_generate.AnimaCommand.validate(anima_generate.build_parser().parse_args())
+
     @pytest.mark.parametrize("flag", ["--prompt", "--negative-prompt"])
     def test_a_weight_out_of_range_fails_before_the_model_loads(self, monkeypatch, flag):
-        other = [] if flag == "--prompt" else ["--prompt", "cat"]
+        other = [] if flag == "--prompt" else ["--prompt", "cat", "--guidance", "4"]
         argv = ["mflux-generate-anima", "--seed", "1", flag, "(cat:1e39)", *other]
         monkeypatch.setattr(sys, "argv", argv)
         monkeypatch.setattr(anima_generate, "Anima", _StubAnima)

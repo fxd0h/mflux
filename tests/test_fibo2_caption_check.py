@@ -57,10 +57,10 @@ def test_a_count_takes_what_thales_vgl_takes_as_an_integer(value, valid):
 
 
 def test_unknown_and_missing_fields_are_warnings():
-    caption = {key: value for key, value in CAPTION.items() if key != "context"} | {"short_description": "typo"}
+    caption = {key: value for key, value in CAPTION.items() if key != "context"} | {"shortdescription": "typo"}
     assert Fibo2CaptionCheck.check(json.dumps(caption), edit=False) == [
         "Missing: context. FIBO 2's training captions have these fields.",
-        "Unknown field 'short_description': the model was not trained on it. Did you mean 'short_description'?",
+        "Unknown field 'shortdescription': the model was not trained on it. Did you mean 'short_description'?",
     ]
 
 
