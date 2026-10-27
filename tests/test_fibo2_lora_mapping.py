@@ -100,3 +100,15 @@ class TestFibo2ComfyFusedKeys:
         for i, name in enumerate(("w1", "w3")):
             delta = getattr(block.feed_forward, name)(x) - before[name]
             assert mx.allclose(delta, fused_ffn[:, i * hidden : (i + 1) * hidden], atol=1e-3).item(), name
+
+    def test_comfyui_padding_of_the_feed_forward_is_cut_off(self):
+        # Bria's feed-forward is 9536 wide; ComfyUI's repack pads each half of w13 and the input of w2 to 9728 with zeros
+        import mlx.core as mx
+
+        hidden, padded, rank = Fibo2LoRAMapping.FFN_HIDDEN, 9728, 4
+        assert hidden == 9536
+        up = mx.concatenate([mx.ones((hidden, rank)), mx.zeros((padded - hidden, rank)), 2 * mx.ones((hidden, rank)), mx.zeros((padded - hidden, rank))])  # fmt: off
+        gate, up_part = (Fibo2LoRAMapping._part(up, i, 2, hidden) for i in range(2))
+        assert gate.shape == (hidden, rank) and float(gate.min()) == 1.0
+        assert up_part.shape == (hidden, rank) and float(up_part.min()) == 2.0
+        assert Fibo2LoRAMapping._unpad_down(mx.ones((rank, padded))).shape == (rank, hidden)
