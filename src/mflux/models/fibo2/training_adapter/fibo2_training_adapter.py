@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
 import math
 import random
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +10,6 @@ import mlx.core as mx
 from mflux.models.common.config.config import Config
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
-from mflux.models.common.lora.mapping.peft_lora_metadata import PeftLoRAMetadata
 from mflux.models.common.schedulers.flow_match_euler_discrete_scheduler import FlowMatchEulerDiscreteScheduler
 from mflux.models.common.training.adapters.base import TrainingAdapter
 from mflux.models.common.training.lora.path_util import expand_module_paths_from_targets
@@ -20,6 +17,7 @@ from mflux.models.common.training.state.training_spec import TrainingSpec
 from mflux.models.common.training.utils import TrainingUtil
 from mflux.models.common.vae.vae_util import VAEUtil
 from mflux.models.fibo2.latent_creator.fibo2_latent_creator import Fibo2LatentCreator
+from mflux.models.fibo2.training_adapter.fibo2_comfy_lora import Fibo2ComfyLoRA
 from mflux.models.fibo2.variants.fibo2_core import _Fibo2Core
 from mflux.models.fibo2.variants.txt2img.fibo2 import Fibo2
 from mflux.models.fibo2.weights.fibo2_lora_mapping import Fibo2LoRAMapping
@@ -132,26 +130,15 @@ class Fibo2TrainingAdapter(TrainingAdapter):
         return image.image
 
     def save_lora_adapter(self, *, path: Path, training_spec: TrainingSpec) -> None:
-        weights: dict[str, mx.array] = {}
-        ranks: dict[str, int] = {}
-        alphas: dict[str, float] = {}
+        # Saved in ComfyUI's layout, which ComfyUI and ai-toolkit read and mflux loads back (Fibo2LoRAMapping)
+        loras = {}
         for module_path, _, _ in expand_module_paths_from_targets(training_spec.lora_layers.targets):
             lora = TrainingUtil.get_train_lora(self._fibo2.transformer, module_path)
-            name = Fibo2LoRAMapping.diffusers_name(module_path)
-            weights[f"transformer.{name}.lora_A.weight"] = mx.transpose(lora.lora_A)
-            weights[f"transformer.{name}.lora_B.weight"] = mx.transpose(lora.lora_B)
-            ranks[name] = int(lora.lora_A.shape[1])
-            # The layer's strength, alpha / rank: alpha from the config, or rank after a resume, which folds it into B
-            alphas[name] = float(lora.scale) * ranks[name]
+            loras[module_path] = (mx.transpose(lora.lora_A), mx.transpose(lora.lora_B), float(lora.scale))
         mx.save_safetensors(
             str(path),
-            weights,
-            metadata={
-                "format": "pt",
-                PeftLoRAMetadata.METADATA_KEY: Fibo2TrainingAdapter._peft_metadata(ranks, alphas),
-                "mflux_version": VersionUtil.get_mflux_version(),
-                "model": training_spec.model,
-            },
+            Fibo2ComfyLoRA.weights(loras),
+            metadata={"format": "pt", "mflux_version": VersionUtil.get_mflux_version(), "model": training_spec.model},
         )
 
     def load_lora_adapter(self, *, path: str | Path) -> None:
@@ -177,27 +164,3 @@ class Fibo2TrainingAdapter(TrainingAdapter):
     def _clear_prompt_cache(self) -> None:
         # The model is a module, so arrays left in its prompt cache would be trained and decayed with the LoRA
         self._fibo2.prompt_cache = {}
-
-    @staticmethod
-    def _peft_metadata(ranks: dict[str, int], alphas: dict[str, float]) -> str:
-        # The LoRA config as diffusers writes it for a pipeline: the most common rank and alpha, the others by module.
-        # PEFT matches a pattern against the end of a module name; "^" makes it match the whole name only.
-        rank = Counter(ranks.values()).most_common(1)[0][0]
-        alpha = Counter(alphas.values()).most_common(1)[0][0]
-        config = {
-            "r": rank,
-            "lora_alpha": Fibo2TrainingAdapter._number(alpha),
-            "target_modules": sorted(ranks),
-            "rank_pattern": {f"^{name}": r for name, r in ranks.items() if r != rank},
-            "alpha_pattern": {f"^{name}": Fibo2TrainingAdapter._number(a) for name, a in alphas.items() if a != alpha},
-            "lora_dropout": 0.0,
-            "bias": "none",
-            "use_rslora": False,
-            "use_dora": False,
-            "init_lora_weights": True,
-        }
-        return json.dumps({f"transformer.{key}": value for key, value in config.items()}, sort_keys=True)
-
-    @staticmethod
-    def _number(value: float) -> int | float:
-        return int(value) if float(value).is_integer() else value

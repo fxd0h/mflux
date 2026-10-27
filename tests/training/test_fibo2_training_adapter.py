@@ -1,4 +1,3 @@
-import json
 import math
 import random
 from types import SimpleNamespace
@@ -195,7 +194,7 @@ def test_a_few_training_steps_lower_the_loss_of_a_tiny_fibo2(monkeypatch):
     assert losses[-1] < losses[0]
 
 
-def test_the_saved_lora_has_diffusers_keys_and_alpha_and_loads_back(monkeypatch, tmp_path):
+def test_the_saved_lora_has_comfyui_keys_and_loads_back_at_its_strength(monkeypatch, tmp_path):
     adapter = _Fake.adapter(monkeypatch)
     targets = _Fake.with_lora(adapter)
     _Fake.randomize_lora_b(adapter.transformer())
@@ -204,17 +203,14 @@ def test_the_saved_lora_has_diffusers_keys_and_alpha_and_loads_back(monkeypatch,
     path = tmp_path / "adapter.safetensors"
     adapter.save_lora_adapter(path=path, training_spec=spec)
 
-    weights, metadata = mx.load(str(path), return_metadata=True)
-    assert len(weights) == 2 * len(targets)
-    # diffusers' names for the modules it keeps in an nn.Sequential, PEFT's (rank, in) and (out, rank) layouts
-    assert weights["transformer.t_embedder.mlp.0.lora_A.weight"].shape == (RANK, 256)
-    assert weights["transformer.final_layer.adaLN_modulation.1.lora_B.weight"].shape == (64, RANK)
-    assert "transformer.layers.1.cross_attention.to_out.0.lora_A.weight" in weights
-    config = json.loads(metadata["lora_adapter_metadata"])
-    assert config["transformer.r"] == RANK
-    assert config["transformer.lora_alpha"] == ALPHA
-    assert config["transformer.rank_pattern"] == {} and config["transformer.alpha_pattern"] == {}
-    assert len(config["transformer.target_modules"]) == len(targets)
+    weights = mx.load(str(path))
+    # ComfyUI's names and fused layers: q/k/v stacked into attention.qkv (rank 3 x RANK), the timestep MLP and final
+    # modulation under their Sequential indices, to_out without its .0
+    assert weights["diffusion_model.t_embedder.mlp.0.lora_A.weight"].shape == (RANK, 256)
+    assert weights["diffusion_model.final_layer.adaLN_modulation.1.lora_B.weight"].shape == (64, RANK)
+    assert weights["diffusion_model.layers.0.attention.qkv.lora_A.weight"].shape[0] == 3 * RANK
+    assert "diffusion_model.layers.1.cross_attention.to_out.lora_A.weight" in weights
+    assert not any(".to_q.lora" in key and ".attention.to_q" in key and "cross" not in key for key in weights)
 
     # Loaded on a fresh model with the same base weights, the adapter gives the same output, alpha / rank included
     resumed = Fibo2TrainingAdapter(model_config=ModelConfig.fibo2(), quantize=None)
@@ -222,20 +218,32 @@ def test_the_saved_lora_has_diffusers_keys_and_alpha_and_loads_back(monkeypatch,
     resumed.load_lora_adapter(path=path)
     assert mx.allclose(_Fake.output(resumed.transformer()), expected, rtol=1e-5, atol=1e-4).item()
 
-    # A resumed run saves its strength again: the loader folded alpha / rank into B, so the file now says alpha = rank
+    # A resumed run saves the same strength again
     again = tmp_path / "again.safetensors"
     resumed.save_lora_adapter(path=again, training_spec=spec)
-    assert json.loads(mx.load(str(again), return_metadata=True)[1]["lora_adapter_metadata"])["transformer.lora_alpha"] == RANK  # fmt: off
     reloaded = Fibo2TrainingAdapter(model_config=ModelConfig.fibo2(), quantize=None)
     reloaded.load_lora_adapter(path=again)
     assert mx.allclose(_Fake.output(reloaded.transformer()), expected, rtol=1e-5, atol=1e-4).item()
 
 
-def test_mixed_ranks_are_saved_as_peft_patterns():
-    config = json.loads(Fibo2TrainingAdapter._peft_metadata({"a": 4, "b": 4, "c": 8}, {"a": 4.0, "b": 4.0, "c": 16.0}))
-    assert config["transformer.r"] == 4 and config["transformer.lora_alpha"] == 4
-    assert config["transformer.rank_pattern"] == {"^c": 8}
-    assert config["transformer.alpha_pattern"] == {"^c": 16}
+def test_the_feed_forward_is_padded_like_the_comfyui_repack():
+    # Bria's 9536-wide feed-forward is stored 9728 wide in Comfy-Org's repack; the saved LoRA matches it
+    from mflux.models.fibo2.training_adapter.fibo2_comfy_lora import Fibo2ComfyLoRA
+    from mflux.models.fibo2.weights.fibo2_lora_mapping import Fibo2LoRAMapping
+
+    rank, dim, hidden = 2, 8, Fibo2LoRAMapping.FFN_HIDDEN
+    loras = {
+        "layers.0.feed_forward.w1": (mx.ones((rank, dim)), mx.ones((hidden, rank)), 1.0),
+        "layers.0.feed_forward.w3": (mx.ones((rank, dim)), 2 * mx.ones((hidden, rank)), 1.0),
+        "layers.0.feed_forward.w2": (mx.ones((rank, hidden)), mx.ones((dim, rank)), 0.5),
+    }
+    weights = Fibo2ComfyLoRA.weights(loras)
+    up = weights["diffusion_model.layers.0.feed_forward.w13.lora_B.weight"]
+    assert up.shape == (2 * 9728, 2 * rank)
+    assert float(up[:hidden, :rank].min()) == 1.0 and float(up[9728 : 9728 + hidden, rank:].min()) == 2.0
+    assert float(mx.abs(up[hidden:9728]).max()) == 0.0
+    assert weights["diffusion_model.layers.0.feed_forward.w2.lora_A.weight"].shape == (rank, 9728)
+    assert float(weights["diffusion_model.layers.0.feed_forward.w2.lora_B.weight"].max()) == 0.5
 
 
 def test_gradient_checkpointing_gives_the_same_loss_and_gradients(monkeypatch):

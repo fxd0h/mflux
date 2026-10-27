@@ -55,7 +55,7 @@ class Fibo2LoRAMapping:
 
     @staticmethod
     def diffusers_name(model_path: str) -> str:
-        # The name diffusers and PEFT give the module at this MLX path, which a saved LoRA's keys use
+        # The name diffusers, PEFT and ComfyUI give the module at this MLX path, which a saved LoRA's keys use
         return Fibo2LoRAMapping.DIFFUSERS_NAMES.get(model_path, model_path)
 
     def _norm_targets() -> list[LoRATarget]:
