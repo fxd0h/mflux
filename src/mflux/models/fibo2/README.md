@@ -218,6 +218,8 @@ A config for the 44 transformer layers, attention and feed-forward, with rank 16
   "steps": 20,
   "guidance": 5.0,
   "max_resolution": 768,
+  "gradient_checkpointing": true,
+  "cache_limit_gb": 2,
   "training_loop": { "num_epochs": 50, "batch_size": 1 },
   "optimizer": { "name": "AdamW", "learning_rate": 1e-4, "optimizer_params": { "weight_decay": 0.01 }, "max_grad_norm": 1.0 },
   "checkpoint": { "output_path": "output", "save_frequency": 200 },
@@ -233,7 +235,9 @@ A config for the 44 transformer layers, attention and feed-forward, with rank 16
 }
 ```
 
-`steps` and `guidance` are for the preview images; FIBO 2 Dev needs guidance for them. The trained LoRA is saved as diffusers saves a pipeline's LoRA, with its `lora_alpha` in the file's metadata, so it loads with `--lora`, in diffusers with `load_lora_adapter`, and in Bria's examples. On an M5 Max in bf16, with rank 16 on all 415 linear layers, a step took 1.4 seconds at 512×512 with a peak of 47 GB, and 3.5 seconds at 768×768 with a peak of 76 GB. `"gradient_checkpointing": true` lowers the peak, and `"quantize": 8` trains over a quantized base.
+`steps` and `guidance` are for the preview images; FIBO 2 Dev needs guidance for them. Once the captions are encoded, mflux encodes the preview prompts and lets the 8.7 GB Qwen3-VL text encoder go, unless a preview caption has `text_render` entries. The LoRA is saved with ComfyUI's keys and layout (`diffusion_model.*`, q, k and v in `attention.qkv`, the feed-forward gate and up in `w13`, padded to 9728), so it loads with `--lora`, in ComfyUI and in ai-toolkit.
+
+On an M5 Max in bf16, with rank 16 on 410 linear layers at 512×512, gradient checkpointing and `cache_limit_gb: 2`, a step took 2.7 to 3.0 seconds with a peak of 21 GB. Without `cache_limit_gb` MLX keeps freed buffers and the peak looks higher than the training needs. `"quantize": 8` trains over a quantized base.
 
 ## Notes
 - **Implementation**: the transformer is the Z-Image block with gated cross-attention to the text encoder in five layers, and a Perceiver that turns the text encoder output into 256 to 512 "gist" tokens. mflux reuses the FLUX.2 VAE, the Z-Image feed-forward, timestep, RoPE and final layers, and the shared Qwen3-VL language model and vision tower (also used by Qwen-Image 2.1), with 3D positions and deepstack features for images. The port follows the [diffusers implementation](https://github.com/huggingface/diffusers/tree/main/src/diffusers/pipelines/bria_fibo2) and matches its transformer and text encoder in float32. `tests/test_fibo2_parity.py` checks the transformer against a small diffusers model and the text encoder against `transformers`, layer by layer.
