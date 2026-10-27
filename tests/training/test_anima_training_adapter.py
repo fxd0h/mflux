@@ -1,0 +1,92 @@
+from contextlib import nullcontext
+from types import SimpleNamespace
+
+import mlx.core as mx
+import pytest
+
+from mflux.models.anima.model.anima_transformer.anima_transformer import AnimaTransformer
+from mflux.models.anima.training_adapter import anima_training_adapter as anima_adapter_module
+from mflux.models.anima.weights.anima_lora_mapping import AnimaLoRAMapping
+from mflux.models.common.config.model_config import ModelConfig
+from mflux.models.common.lora.mapping.lora_loader import LoRALoader
+from mflux.models.common.training.lora.target_injector import inject_lora_targets
+from mflux.models.common.training.state.training_spec import BlockRange, LoraLayersSpec, LoraTargetSpec
+
+AnimaTrainingAdapter = anima_adapter_module.AnimaTrainingAdapter
+
+
+class _FakeAnima:
+    def __init__(self, *, quantize, model_config, model_path=None, bake_lora=True):  # noqa: ARG002
+        self.recorded = []
+        self.last_generate_kwargs = None
+
+        def transformer(latents, sigma, context):
+            self.recorded.append(SimpleNamespace(latents=latents, sigma=sigma, context=context))
+            return (latents * 2).astype(mx.bfloat16)
+
+        self.transformer = transformer
+
+    def generate_image(self, **kwargs):
+        self.last_generate_kwargs = kwargs
+        return "preview-image"
+
+
+@pytest.mark.fast
+def test_predict_noise_feeds_sigma_and_returns_the_velocity_in_the_latent_dtype(monkeypatch):
+    # The trainer's loss is (clean + prediction - noise)^2, so the prediction is the flow velocity noise - clean,
+    # which is what Anima's transformer returns for sigma (not an index)
+    monkeypatch.setattr(anima_adapter_module, "Anima", _FakeAnima)
+    adapter = AnimaTrainingAdapter(model_config=ModelConfig.anima_base(), quantize=None)
+    latents_t = mx.ones((1, 16, 8, 8), dtype=mx.float32)
+
+    velocity = adapter.predict_noise(t=1, latents_t=latents_t, sigmas=mx.array([0.9, 0.4, 0.0]), cond=mx.zeros((1, 512, 8)), config=None)  # fmt: off
+
+    call = adapter._anima.recorded[-1]
+    assert call.sigma.shape == (1,) and float(call.sigma[0]) == pytest.approx(0.4)
+    assert velocity.dtype == mx.float32 and mx.allclose(velocity, latents_t * 2).item()
+
+
+@pytest.mark.fast
+def test_the_schedule_is_anima_and_the_preview_uses_the_training_guidance(monkeypatch):
+    monkeypatch.setattr(anima_adapter_module, "Anima", _FakeAnima)
+    adapter = AnimaTrainingAdapter(model_config=ModelConfig.anima_base(), quantize=None)
+    monkeypatch.setattr(adapter, "_assistant_disabled", lambda: nullcontext())
+
+    config = adapter.create_config(SimpleNamespace(steps=30, guidance=4.0), width=512, height=512)
+    adapter.generate_preview_image(seed=7, prompt="bluxyz, a guitar", width=512, height=512, steps=30)
+
+    assert config.scheduler.sigmas.shape[0] == 31
+    assert adapter._anima.last_generate_kwargs["guidance"] == 4.0
+
+
+@pytest.mark.fast
+def test_a_saved_lora_has_comfyui_keys_and_loads_back_through_the_anima_mapping(monkeypatch, tmp_path):
+    # ComfyUI and ai-toolkit name Anima LoRA layers diffusion_model.blocks.N...; mflux reads the same keys
+    transformer = AnimaTransformer(dim=128, num_blocks=2, num_heads=2, context_dim=64, adaln_lora_dim=32)
+    targets = [
+        LoraTargetSpec(module_path="blocks.{block}.self_attn.q_proj", blocks=BlockRange(start=0, end=2), rank=4),
+        LoraTargetSpec(module_path="blocks.{block}.adaln_modulation_mlp.1", blocks=BlockRange(start=0, end=2), rank=4),
+    ]
+    inject_lora_targets(transformer, targets)
+    adapter = object.__new__(AnimaTrainingAdapter)
+    adapter._anima = SimpleNamespace(transformer=transformer)
+    path = tmp_path / "anima_lora.safetensors"
+
+    adapter.save_lora_adapter(path=path, training_spec=SimpleNamespace(lora_layers=LoraLayersSpec(targets=targets), model="anima-base"))  # fmt: off
+
+    keys = set(mx.load(str(path)))
+    assert "diffusion_model.blocks.1.self_attn.q_proj.lora_A.weight" in keys
+    assert "diffusion_model.blocks.0.adaln_modulation_mlp.1.lora_B.weight" in keys
+    fresh = AnimaTransformer(dim=128, num_blocks=2, num_heads=2, context_dim=64, adaln_lora_dim=32)
+    paths, _ = LoRALoader.load_and_apply_lora(AnimaLoRAMapping.get_mapping(), fresh, [str(path)], [1.0], bake_lora=False)  # fmt: off
+    assert paths == [str(path)]
+
+
+@pytest.mark.fast
+def test_gradient_checkpointing_keeps_the_output():
+    transformer = AnimaTransformer(dim=128, num_blocks=2, num_heads=2, context_dim=64, adaln_lora_dim=32)
+    latents = mx.random.normal((1, 16, 8, 8), key=mx.random.key(0))
+    context = mx.random.normal((1, 8, 64), key=mx.random.key(1))
+    plain = transformer(latents, mx.array([0.5]), context)
+    transformer.gradient_checkpointing = True
+    assert mx.allclose(transformer(latents, mx.array([0.5]), context), plain).item()

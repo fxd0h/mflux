@@ -143,6 +143,34 @@ unset, steps and guidance follow the variant. `Anima(...)` takes `model_path`, `
 
 </details>
 
+## Training
+
+`mflux-train` trains Anima LoRAs on Base, as the model card and ai-toolkit advise. Start from
+[`train_anima.json`](../common/training/_example/train_anima.json): rank 16 on the attention, MLP and AdaLN
+modulation layers of all 28 blocks, at 512, AdamW at 1e-4. For the dataset layout see the common
+[training docs](../common/README.md#training-lora).
+
+```sh
+mflux-train --config /path/to/train_anima.json
+```
+
+The LoRA is saved with ComfyUI's keys (`diffusion_model.blocks.N...`), the same ones ai-toolkit writes, so it loads
+in mflux, ComfyUI and ai-toolkit. Add `"cache_limit_gb": 2` to the config to keep MLX from holding freed buffers;
+without it the run reaches the same speed with a higher peak.
+
+Measured on an M5 Max with the same 12 images, 300 steps at 512, rank 16, against ai-toolkit (73ebae1, MPS,
+gradient checkpointing on, its default):
+
+| Trainer | Time per step | 300 steps | Whole run | Peak memory |
+| --- | --- | --- | --- | --- |
+| ai-toolkit | 1.28 s | 6:23 | 524 s | 11.3 GB |
+| mflux, `gradient_checkpointing` and `cache_limit_gb: 2` | 0.61 s | 3:04 | 208 s | 11.2 GB |
+| mflux, `cache_limit_gb: 2` | 0.49 s | 2:27 | 171 s | 13.2 GB |
+
+A LoRA from either trainer gives the same style on the same seeds. Applied to the same states step by step,
+mflux and ComfyUI agree within 4% with either LoRA (the bfloat16 difference without a LoRA), against 35 to 39%
+when mflux runs without it.
+
 ## Weights
 
 The model loads from `circlestone-labs/Anima`, and only the files of the variant in use are downloaded: one
