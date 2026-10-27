@@ -5,6 +5,7 @@ from mflux.callbacks.callback_manager import CallbackManager
 from mflux.cli.parser.parsers import CommandLineParser, lora_init_kwargs_from_args
 from mflux.models.anima.latent_creator.anima_latent_creator import AnimaLatentCreator
 from mflux.models.anima.model.anima_scheduler import AnimaSampler, AnimaScheduler
+from mflux.models.anima.model.anima_text_encoder.anima_prompt_weights import AnimaPromptWeights
 from mflux.models.anima.variants.txt2img.anima import Anima
 from mflux.models.common.compute_precision import ComputePrecision
 from mflux.models.common.config.model_config import ModelConfig
@@ -57,6 +58,8 @@ class AnimaCommand:
             base_model=args.base_model,
         )
         AnimaSampler.resolve(args.scheduler)
+        if isinstance(getattr(args, "prompt", None), str):
+            AnimaPromptWeights.parse(args.prompt)
         if args.steps is not None:
             AnimaScheduler.check_steps(args.steps)
         width, height = DimensionResolver.resolve(width=args.width, height=args.height, reference_image_path=None)

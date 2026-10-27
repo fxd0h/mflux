@@ -192,9 +192,21 @@ class TestAnimaReplay:
         model, _ = run_cli("-C", str(sidecar), "--scheduler", "er_sde")
         assert model.generated[0]["scheduler"] == "er_sde"
 
-    def test_an_unknown_recorded_sampler_fails_before_the_model_loads(self, run_cli, tmp_path):
+
+@pytest.mark.fast
+class TestAnimaReplayGuards:
+    def test_a_sidecar_sampler_outside_anima_names_is_refused_by_the_parser(self, run_cli, tmp_path):
+        # A dotted name would otherwise reach the scheduler lookup, which imports it
         sidecar = tmp_path / "image.metadata.json"
-        sidecar.write_text(json.dumps({"prompt": "1girl", "seed": 1, "sampler": "dpm"}))
-        with pytest.raises(ValueError, match="Unknown Anima sampler 'dpm'"):
+        sidecar.write_text(json.dumps({"prompt": "1girl", "seed": 1, "sampler": "os.path.join"}))
+        with pytest.raises(SystemExit):
             run_cli("-C", str(sidecar))
+        assert _StubAnima.instances == []
+
+    def test_a_weight_that_is_not_finite_fails_before_the_model_loads(self, monkeypatch):
+        monkeypatch.setattr(sys, "argv", ["mflux-generate-anima", "--prompt", "(cat:nan)", "--seed", "1"])
+        monkeypatch.setattr(anima_generate, "Anima", _StubAnima)
+        _StubAnima.instances.clear()
+        with pytest.raises(ValueError, match="not a finite number"):
+            anima_generate.main()
         assert _StubAnima.instances == []

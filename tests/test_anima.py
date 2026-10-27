@@ -535,3 +535,61 @@ class TestAnimaPromptWeights:
         weighted = model.encode_text(hidden, ids, mx.array([1.0, 2.0, 1.0, 1.0]))
         assert mx.allclose(weighted[:, 1], 2 * plain[:, 1], atol=1e-2)
         assert mx.array_equal(weighted[:, 0], plain[:, 0]) and mx.array_equal(weighted[:, 4:], plain[:, 4:])
+
+
+class _WordTokenizer:
+    # One id per character, T5-style </s> (id 1) when asked for special tokens
+    def __init__(self, eos: int | None, max_length: int):
+        self.eos_token_id = eos
+        self.max_length = max_length
+        self.tokenizer = self
+
+    def __call__(self, text: str, add_special_tokens: bool = True) -> dict:
+        ids = [ord(c) for c in text]
+        return {"input_ids": ids + ([self.eos_token_id] if self.eos_token_id and add_special_tokens else [])}
+
+
+class _RecordingTransformer:
+    def __init__(self):
+        self.calls = []
+
+    def encode_text(self, hidden_states, t5_ids, t5_weights=None):
+        self.calls.append((hidden_states, t5_ids, t5_weights))
+        return hidden_states
+
+
+@pytest.mark.fast
+class TestAnimaWeightedEncoding:
+    @staticmethod
+    def _encode(prompt: str, max_length: int = 64):
+        transformer = _RecordingTransformer()
+        seen = []
+
+        def text_encoder(ids, dtype):
+            seen.append(ids)
+            return mx.zeros((1, ids.shape[1], 4)), None
+
+        AnimaPromptEncoder.encode(
+            prompt=prompt,
+            qwen_tokenizer=_WordTokenizer(eos=None, max_length=max_length),
+            t5_tokenizer=_WordTokenizer(eos=1, max_length=max_length),
+            text_encoder=text_encoder,
+            transformer=transformer,
+        )
+        _, t5_ids, weights = transformer.calls[0]
+        return seen[0].tolist()[0], t5_ids.tolist()[0], weights.tolist()
+
+    def test_each_part_keeps_its_tokens_and_its_weight(self):
+        qwen, t5, weights = self._encode("ab(cd:2)e")
+        assert qwen == [ord(c) for c in "abcde"]
+        assert t5 == [ord(c) for c in "abcde"] + [1]
+        assert weights == [1.0, 1.0, 2.0, 2.0, 1.0, 1.0]
+
+    def test_a_long_prompt_is_cut_and_keeps_its_closing_token(self):
+        qwen, t5, weights = self._encode("(" + "x" * 20 + ":0.5)", max_length=8)
+        assert len(qwen) == 8 and t5 == [ord("x")] * 7 + [1] and weights == [0.5] * 7 + [1.0]
+
+    @pytest.mark.parametrize("weight", ["nan", "inf", "-inf"])
+    def test_a_weight_that_is_not_finite_is_refused(self, weight):
+        with pytest.raises(ValueError, match="not a finite number"):
+            AnimaPromptWeights.parse(f"1girl, (smile:{weight})")

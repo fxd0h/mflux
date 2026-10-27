@@ -57,10 +57,11 @@ The model card describes the prompt format in detail. In short:
   artifacts, chromatic aberration`.
 - Artists take an `@` prefix (`@artist name`). Safety tags are `safe`, `sensitive`, `nsfw` and `explicit`; the card
   advises them in the positive and negative prompts.
-- ComfyUI's weighting works as in ComfyUI: `(chibi:1.3)` sets a weight, `(chibi)` is 1.1 and nesting multiplies.
-  The weight scales what the LLM adapter makes of those tokens, and the parentheses are not part of the prompt the
-  encoders read, so a prompt from ComfyUI gives the same conditioning. A tag with parentheses in its name needs
-  backslashes, as in ComfyUI: `fern \(sousou no frieren\)`.
+- ComfyUI's weighting works as in ComfyUI: `(chibi:1.3)` sets a weight and `(chibi)` is 1.1. Unweighted parentheses
+  multiply when nested, and a weight inside a group replaces the group's. The weight scales what the LLM adapter
+  makes of those tokens, and the parentheses are not part of the prompt the encoders read, so a prompt from ComfyUI
+  gives the same conditioning. A tag with parentheses in its name needs backslashes, as in ComfyUI:
+  `fern \(sousou no frieren\)`.
 
 ## Quantization and saving
 

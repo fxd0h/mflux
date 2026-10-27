@@ -1,3 +1,6 @@
+import math
+
+
 class AnimaPromptWeights:
     # ComfyUI's prompt weighting, as its Anima text encoder reads it: "(tag)" is weight 1.1, "(tag:1.3)" is 1.3,
     # nesting multiplies, and \( \) are literal parentheses. Each part is tokenized on its own; the Qwen3 encoder
@@ -31,6 +34,9 @@ class AnimaPromptWeights:
                         inner = inner[:colon]
                     except ValueError:
                         pass
+                    if not math.isfinite(weight):
+                        # ComfyUI would scale the context by it and the image comes out black
+                        raise ValueError(f"The prompt weight in ({part[1:-1]}) is not a finite number.")
                 out += AnimaPromptWeights._weights(inner, weight)
             else:
                 out.append((part, current_weight))

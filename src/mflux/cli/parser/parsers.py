@@ -572,13 +572,16 @@ class CommandLineParser(argparse.ArgumentParser):
                     self.error(f"compute_precision in --config-from-conf: invalid choice {recorded_precision!r} (choose from {', '.join(sorted(ComputePrecision.CHOICES))})")  # fmt: off
                 namespace.compute_precision = recorded_precision
             # Anima records its sampler (er_sde or euler) apart from the schedule, and --scheduler picks it.
-            # The command checks the name before the model loads.
+            # Only those names: anything else would reach the scheduler lookup, which imports a dotted name.
             if (
                 hasattr(namespace, "scheduler")
                 and prior_gen_metadata.get("sampler") is not None
                 and not self._option_was_provided("--scheduler")
             ):
-                namespace.scheduler = prior_gen_metadata["sampler"]
+                recorded_sampler = prior_gen_metadata["sampler"]
+                if recorded_sampler not in ("er_sde", "euler"):
+                    self.error(f"sampler in --config-from-conf: {recorded_sampler!r} is not er_sde or euler.")
+                namespace.scheduler = recorded_sampler
             # A schedule other than the default changes the image as well (Qwen-Image-2.1's viggle_turbo).
             if (
                 hasattr(namespace, "scheduler")
