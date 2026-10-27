@@ -58,13 +58,28 @@ class AnimaCommand:
             base_model=args.base_model,
         )
         AnimaSampler.resolve(args.scheduler)
-        if isinstance(getattr(args, "prompt", None), str):
-            AnimaPromptWeights.parse(args.prompt)
+        AnimaCommand._check_prompt_weights(args)
         if args.steps is not None:
             AnimaScheduler.check_steps(args.steps)
         width, height = DimensionResolver.resolve(width=args.width, height=args.height, reference_image_path=None)
         AnimaLatentCreator.check_size(height=height, width=width)
         return model_config
+
+    @staticmethod
+    def _check_prompt_weights(args: Namespace) -> None:
+        # Parse the text the encoders will read, so a bad weight fails before the weights load. A prompt from stdin
+        # ("-") can be read once only; generate() checks it. A prompt file that cannot be read is reported by main().
+        prompt = getattr(args, "prompt", None)
+        if getattr(args, "prompt_file", None) is not None:
+            try:
+                prompt = PromptUtil.read_prompt(args)
+            except PromptFileReadError:
+                prompt = None
+        if isinstance(prompt, str) and prompt != "-":
+            AnimaPromptWeights.parse(prompt)
+        negative_prompt = getattr(args, "negative_prompt", None)
+        if isinstance(negative_prompt, str):
+            AnimaPromptWeights.parse(negative_prompt)
 
     @staticmethod
     def load(args: Namespace) -> Anima:
@@ -78,6 +93,8 @@ class AnimaCommand:
 
     @staticmethod
     def generate(model: Anima, args: Namespace, seed: int, prompt: str) -> GeneratedImage:
+        # The prompt may come from stdin or be re-read from its file for each seed, so check this text again.
+        AnimaPromptWeights.parse(prompt)
         # Steps and guidance left unset take the variant's defaults from the model.
         width, height = DimensionResolver.resolve(width=args.width, height=args.height, reference_image_path=None)
         return model.generate_image(

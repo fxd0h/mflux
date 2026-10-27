@@ -1,11 +1,15 @@
 import math
 
+import numpy as np
+
 
 class AnimaPromptWeights:
     # ComfyUI's prompt weighting, as its Anima text encoder reads it: "(tag)" is weight 1.1, "(tag:1.3)" is 1.3,
     # nesting multiplies, and \( \) are literal parentheses. Each part is tokenized on its own; the Qwen3 encoder
     # sees every part at weight 1, and the adapter's output for each T5 token is scaled by its part's weight.
     # Port of parse_parentheses and token_weights in comfy/sd1_clip.py.
+
+    MAX_WEIGHT = float(np.finfo(np.float32).max)
 
     @staticmethod
     def parse(prompt: str) -> list[tuple[str, float]]:
@@ -34,9 +38,10 @@ class AnimaPromptWeights:
                         inner = inner[:colon]
                     except ValueError:
                         pass
-                    if not math.isfinite(weight):
-                        # ComfyUI would scale the context by it and the image comes out black
-                        raise ValueError(f"The prompt weight in ({part[1:-1]}) is not a finite number.")
+                # The weights go to the encoder as a float32 array. ComfyUI would scale the context by a weight
+                # that is not finite and the image comes out black. Nested groups multiply, so check the product.
+                if not math.isfinite(weight) or abs(weight) > AnimaPromptWeights.MAX_WEIGHT:
+                    raise ValueError(f"The prompt weight in ({part[1:-1]}) is not a finite number in float32 range.")
                 out += AnimaPromptWeights._weights(inner, weight)
             else:
                 out.append((part, current_weight))

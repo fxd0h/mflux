@@ -210,3 +210,43 @@ class TestAnimaReplayGuards:
         with pytest.raises(ValueError, match="not a finite number"):
             anima_generate.main()
         assert _StubAnima.instances == []
+
+    def test_a_negative_prompt_weight_that_is_not_finite_fails_before_the_model_loads(self, monkeypatch):
+        argv = [
+            "mflux-generate-anima",
+            "--prompt",
+            "cat",
+            "--negative-prompt",
+            "(x:nan)",
+            "--guidance",
+            "4",
+            "--seed",
+            "1",
+        ]
+        monkeypatch.setattr(sys, "argv", argv)
+        monkeypatch.setattr(anima_generate, "Anima", _StubAnima)
+        _StubAnima.instances.clear()
+        with pytest.raises(ValueError, match="not a finite number"):
+            anima_generate.main()
+        assert _StubAnima.instances == []
+
+    @pytest.mark.parametrize("flag", ["--prompt", "--negative-prompt"])
+    def test_a_weight_out_of_range_fails_before_the_model_loads(self, monkeypatch, flag):
+        other = [] if flag == "--prompt" else ["--prompt", "cat"]
+        argv = ["mflux-generate-anima", "--seed", "1", flag, "(cat:1e39)", *other]
+        monkeypatch.setattr(sys, "argv", argv)
+        monkeypatch.setattr(anima_generate, "Anima", _StubAnima)
+        _StubAnima.instances.clear()
+        with pytest.raises(ValueError, match="float32 range"):
+            anima_generate.main()
+        assert _StubAnima.instances == []
+
+    def test_a_prompt_file_is_checked_before_the_model_loads(self, monkeypatch, tmp_path):
+        prompt_file = tmp_path / "prompt.txt"
+        prompt_file.write_text("(cat:nan)")
+        monkeypatch.setattr(sys, "argv", ["mflux-generate-anima", "--prompt-file", str(prompt_file), "--seed", "1"])
+        monkeypatch.setattr(anima_generate, "Anima", _StubAnima)
+        _StubAnima.instances.clear()
+        with pytest.raises(ValueError, match="not a finite number"):
+            anima_generate.main()
+        assert _StubAnima.instances == []
