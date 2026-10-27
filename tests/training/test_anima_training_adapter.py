@@ -132,3 +132,75 @@ def test_an_alpha_other_than_the_rank_is_saved_and_loads_at_the_same_strength(tm
     fresh.blocks[0].mlp.layer1.weight = trained.linear.weight
     LoRALoader.load_and_apply_lora(AnimaLoRAMapping.get_mapping(), fresh, [str(path)], [1.0], bake_lora=False)
     assert mx.allclose(fresh.blocks[0].mlp.layer1(x), expected, atol=1e-4).item()
+
+
+@pytest.mark.fast
+def test_captions_are_encoded_as_plain_text(monkeypatch):
+    # Danbooru tags with a series in parentheses are text, not ComfyUI weights
+    from mflux.models.anima.model.anima_text_encoder import anima_prompt_encoder as encoder_module
+
+    seen = []
+
+    class _Tokenizer:
+        def tokenize(self, text, keep_empty=False):  # noqa: ARG002
+            seen.append(text)
+            return SimpleNamespace(input_ids=mx.array([[1, 2]]))
+
+    def text_encoder(ids, dtype):  # noqa: ARG001
+        return mx.zeros((1, ids.shape[1], 4)), None
+
+    transformer = SimpleNamespace(encode_text=lambda hidden, t5_ids, t5_weights: t5_weights)
+    caption = "1girl, hatsune miku (vocaloid), smile"
+    weights = encoder_module.AnimaPromptEncoder.encode(caption, _Tokenizer(), _Tokenizer(), text_encoder, transformer, weighted=False)  # fmt: off
+    assert weights is None and seen == [caption, caption]
+
+
+@pytest.mark.fast
+def test_the_preview_leaves_no_cached_prompt_and_defaults_its_guidance(monkeypatch):
+    # A cached context on the module would be a trainable parameter; guidance 0.0 from the config means the default
+    monkeypatch.setattr(anima_adapter_module, "Anima", _FakeAnima)
+    adapter = AnimaTrainingAdapter(model_config=ModelConfig.anima_base(), quantize=None)
+    monkeypatch.setattr(adapter, "_assistant_disabled", lambda: nullcontext())
+    adapter.create_config(SimpleNamespace(steps=30, guidance=0.0, lora_layers=LoraLayersSpec(targets=[])), width=512, height=512)  # fmt: off
+    adapter._anima.prompt_cache = {"bluxyz, a lighthouse": mx.zeros((2,))}
+    adapter.generate_preview_image(seed=1, prompt="bluxyz, a lighthouse", width=512, height=512, steps=2)
+    assert adapter._anima.last_generate_kwargs["guidance"] is None
+    assert adapter._anima.prompt_cache == {}
+
+
+@pytest.mark.fast
+def test_gradient_checkpointing_keeps_the_lora_gradients():
+    import mlx.nn as nn
+    from mlx.utils import tree_flatten
+
+    from mflux.models.common.training.trainer import TrainingTrainer
+
+    transformer = AnimaTransformer(dim=128, num_blocks=3, num_heads=2, context_dim=64, adaln_lora_dim=32)
+    targets = [
+        LoraTargetSpec(module_path=f"blocks.{{block}}.{name}", blocks=BlockRange(start=0, end=3), rank=4)
+        for name in ("self_attn.q_proj", "self_attn.output_proj", "mlp.layer1", "mlp.layer2")
+    ]
+    inject_lora_targets(transformer, targets)
+    for _, module in transformer.named_modules():
+        if hasattr(module, "lora_B"):
+            module.lora_B = mx.random.normal(module.lora_B.shape, key=mx.random.key(7)) * 0.01
+    transformer.freeze()
+    transformer.unfreeze(keys=["lora_A", "lora_B"], strict=False)
+    latents = mx.random.normal((1, 16, 8, 8), key=mx.random.key(0))
+    context = mx.random.normal((1, 8, 64), key=mx.random.key(1))
+
+    def loss_fn(model):
+        return mx.mean(model(latents, mx.array([0.5]), context).astype(mx.float32) ** 2)
+
+    results = []
+    for checkpointing in (False, True):
+        transformer.gradient_checkpointing = checkpointing
+        loss, grads = nn.value_and_grad(transformer, loss_fn)(transformer)
+        if checkpointing:
+            TrainingTrainer._evaluate_backward_in_block_order(loss, grads)
+        results.append((loss, dict(tree_flatten(grads))))
+    (plain_loss, plain), (ckpt_loss, ckpt) = results
+    assert len(plain) == 24 and plain.keys() == ckpt.keys()
+    assert mx.allclose(plain_loss, ckpt_loss).item()
+    for key in plain:
+        assert mx.allclose(plain[key], ckpt[key], rtol=1e-4, atol=1e-6).item(), key

@@ -149,7 +149,8 @@ unset, steps and guidance follow the variant. `Anima(...)` takes `model_path`, `
 trains too; Turbo is distilled and refused. Start from
 [`train_anima.json`](../common/training/_example/train_anima.json): rank 16 on the attention, MLP and AdaLN
 modulation layers of all 28 blocks, at 512, AdamW at 1e-4. For the dataset layout see the common
-[training docs](../common/README.md#training-lora).
+[training docs](../common/README.md#training-lora). Captions are read as plain text: `hatsune miku (vocaloid)` is a
+tag, not a prompt weight, and the parentheses don't need escaping.
 
 ```sh
 mflux-train --config /path/to/train_anima.json

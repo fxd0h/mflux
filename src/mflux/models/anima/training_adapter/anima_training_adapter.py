@@ -5,6 +5,7 @@ from typing import Any
 
 import mlx.core as mx
 
+from mflux.models.anima.latent_creator.anima_latent_creator import AnimaLatentCreator
 from mflux.models.anima.model.anima_text_encoder.anima_prompt_encoder import AnimaPromptEncoder
 from mflux.models.anima.variants.txt2img.anima import Anima
 from mflux.models.anima.weights.anima_lora_mapping import AnimaLoRAMapping
@@ -42,7 +43,8 @@ class AnimaTrainingAdapter(TrainingAdapter):
         adapter_targets = [t.module_path for t in training_spec.lora_layers.targets if t.module_path.startswith("llm_adapter")]  # fmt: off
         if adapter_targets:
             raise ValueError(f"Anima trains LoRAs on the transformer blocks only, not on {adapter_targets[0]}: the LLM adapter's output is computed once per caption.")  # fmt: off
-        self._guidance = training_spec.guidance
+        # A config without guidance gives 0.0, which would make the preview the negative prompt's image: use the default
+        self._guidance = training_spec.guidance or None
         return Config(
             model_config=self._model_config,
             num_inference_steps=training_spec.steps,
@@ -71,14 +73,15 @@ class AnimaTrainingAdapter(TrainingAdapter):
         input_image_path: Path | None = None,
     ) -> tuple[mx.array, Any]:
         encoded = LatentCreator.encode_image(vae=self._anima.vae, image_path=image_path, height=height, width=width)
-        # The VAE is a video VAE: drop its single frame to get the (1, 16, H/8, W/8) latents the transformer takes
-        clean_latents = encoded[:, :, 0] if encoded.ndim == 5 else encoded
+        clean_latents = AnimaLatentCreator.pack_latents(encoded, height, width)
+        # Captions are literal text, as ai-toolkit reads them: "hatsune miku (vocaloid)" is a Danbooru tag, not a weight
         context = AnimaPromptEncoder.encode(
             prompt=prompt,
             qwen_tokenizer=self._anima.tokenizers["qwen3"],
             t5_tokenizer=self._anima.tokenizers["t5"],
             text_encoder=self._anima.text_encoder,
             transformer=self._anima.transformer,
+            weighted=False,
         )
         mx.eval(clean_latents, context)
         return clean_latents, context
@@ -98,7 +101,7 @@ class AnimaTrainingAdapter(TrainingAdapter):
         image_paths: list[Path | str] | None = None,
     ):
         with self._assistant_disabled():
-            return self._anima.generate_image(
+            image = self._anima.generate_image(
                 seed=seed,
                 prompt=prompt,
                 num_inference_steps=steps,
@@ -106,6 +109,9 @@ class AnimaTrainingAdapter(TrainingAdapter):
                 width=width,
                 guidance=self._guidance,
             )
+        # The cache lives on the module, so its contexts would become trainable parameters of model()
+        self._anima.prompt_cache = {}
+        return image
 
     def save_lora_adapter(self, *, path: Path, training_spec: TrainingSpec) -> None:
         weights: dict[str, mx.array] = {}
