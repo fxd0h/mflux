@@ -63,6 +63,14 @@ class Fibo2EditCommand:
         if args.mask_path is not None and len(args.image_paths) != 1:
             raise ValueError("--mask-path can only be used with a single image.")
         Fibo2CaptionCheck.check_args(args, edit=True)
+        # A side derived from the image's aspect ratio can pass the transformer's limit. An image that does not
+        # open is left to the load, which reports it as before
+        try:
+            width, height = Fibo2EditCommand._explicit_size(args.width, args.height, args.image_paths[0])
+        except OSError:
+            width = height = None
+        else:
+            Fibo2EditImages.result_size(args.image_paths[0], width, height)
         return ConfigResolution.resolve_restricted(
             args.model,
             DEFAULT_MODEL,
@@ -136,8 +144,14 @@ def main():
 
     try:
         for seed in args.seed:
-            # 3. Generate an image for each seed value
-            image = Fibo2EditCommand.generate(model, args, seed, PromptUtil.read_prompt(args))
+            # 3. Generate an image for each seed value. A prompt from stdin, or a file edited between seeds, is
+            # only read here, so check it before the step loop rather than end in a traceback
+            prompt = PromptUtil.read_prompt(args)
+            try:
+                Fibo2CaptionCheck.check(prompt, edit=True)
+            except ValueError as exc:
+                parser.error(str(exc))
+            image = Fibo2EditCommand.generate(model, args, seed, prompt)
             # 4. Save the image
             image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata)
     except (StopImageGenerationException, PromptFileReadError) as exc:

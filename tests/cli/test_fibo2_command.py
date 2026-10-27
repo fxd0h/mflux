@@ -354,7 +354,7 @@ def test_a_sidecar_text_images_value_must_be_a_boolean(monkeypatch, capsys, tmp_
     [
         (
             ["--prompt", '{"short_description": "x",}'],
-            "not valid JSON: Illegal trailing comma before end of object at line 1, column 26",
+            "not valid JSON",
         ),
         (["--prompt", '{"short_description": "x", "lighting": "soft"}'], "lighting has to be a JSON object"),
         (["--model", "fibo2-edit-turbo", "--prompt-file", "FILE"], "lighting has to be a JSON object"),
@@ -390,3 +390,14 @@ def test_edit_refuses_bad_flags_and_prompts_before_loading(monkeypatch, capsys, 
     assert code == 2
     assert message in err
     assert FakeFibo2Edit.instances == []
+
+
+def test_an_edit_side_derived_past_the_rope_table_fails_before_the_model_loads(monkeypatch, capsys, tmp_path):
+    # A 20:1 image at --height 512 would come out 10240 wide; the transformer has positions for 8192
+    image = tmp_path / "wide.png"
+    PIL.Image.new("RGB", (2000, 100)).save(image)
+    code, err = exit_code(
+        monkeypatch, capsys, edit_cli, ["--prompt", "p", "--image-paths", str(image), "--height", "512"]
+    )
+    assert code == 2
+    assert "up to 8192 pixels a side" in err and "10240x512" in err

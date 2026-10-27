@@ -17,7 +17,7 @@ FIBO 2 is trained on structured JSON captions. Pass the caption as the prompt:
 
 ```sh
 mflux-generate-fibo2 \
-  --prompt '{"short_description": "A red vintage bicycle leaning against a whitewashed wall on a narrow Mediterranean street.", "objects": [{"description": "A red vintage bicycle with a wicker basket of lemons on its handlebars.", "location": "center", "relative_size": "large within frame"}], "background_setting": "A whitewashed wall with a blue wooden door and potted red geraniums.", "lighting": {"conditions": "bright morning sun", "direction": "from the right", "shadows": "long and crisp"}, "aesthetics": {"composition": "centered", "color_scheme": "red, white and blue", "mood_atmosphere": "calm"}, "photographic_characteristics": {"depth_of_field": "deep", "focus": "sharp on the bicycle", "camera_angle": "eye level"}, "style_medium": "photograph", "context": "A travel photograph.", "artistic_style": "realistic"}' \
+  --prompt '{"short_description": "A red vintage bicycle leaning against a whitewashed wall on a narrow Mediterranean street.", "objects": [{"description": "A red vintage bicycle with a wicker basket of lemons on its handlebars.", "location": "center", "relative_size": "large within frame", "relationship": "leaning against the wall"}], "background_setting": "A whitewashed wall with a blue wooden door and potted red geraniums.", "lighting": {"conditions": "bright morning sun", "direction": "from the right", "shadows": "long and crisp"}, "aesthetics": {"composition": "centered", "color_scheme": "red, white and blue", "mood_atmosphere": "calm"}, "photographic_characteristics": {"depth_of_field": "deep", "focus": "sharp on the bicycle", "camera_angle": "eye level", "lens_focal_length": "35mm"}, "style_medium": "photograph", "context": "A travel photograph.", "artistic_style": "realistic"}' \
   --seed 42
 ```
 
@@ -34,10 +34,17 @@ from mflux.models.fibo2.variants import Fibo2
 caption = {
     "short_description": "A red vintage bicycle leaning against a whitewashed wall on a narrow Mediterranean street.",
     "objects": [
-        {"description": "A red vintage bicycle with a wicker basket of lemons on its handlebars.", "location": "center"}
+        {
+            "description": "A red vintage bicycle with a wicker basket of lemons on its handlebars.",
+            "location": "center",
+            "relationship": "leaning against the wall",
+        }
     ],
     "background_setting": "A whitewashed wall with a blue wooden door and potted red geraniums.",
+    "lighting": {"conditions": "bright morning sun", "direction": "from the right", "shadows": "long and crisp"},
+    "aesthetics": {"composition": "centered", "color_scheme": "red, white and blue", "mood_atmosphere": "calm"},
     "style_medium": "photograph",
+    "context": "A travel photograph.",
 }
 model = Fibo2()
 image = model.generate_image(seed=42, prompt=json.dumps(caption))

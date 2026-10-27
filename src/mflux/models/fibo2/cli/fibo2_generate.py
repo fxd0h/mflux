@@ -177,8 +177,14 @@ def main():
         run_args = copy.copy(args)
         run_args.width, run_args.height = DimensionResolver.resolve(width=args.width, height=args.height)
         for seed in args.seed:
-            # 3. Generate an image for each seed value
-            image = Fibo2Command.generate(model, run_args, seed, expanded_prompt or PromptUtil.read_prompt(args))
+            # 3. Generate an image for each seed value. A prompt from stdin, or a file edited between seeds, is
+            # only read here, so check it before the step loop rather than end in a traceback
+            prompt = expanded_prompt or PromptUtil.read_prompt(args)
+            try:
+                Fibo2CaptionCheck.check(prompt, edit=False)
+            except ValueError as exc:
+                parser.error(str(exc))
+            image = Fibo2Command.generate(model, run_args, seed, prompt)
             # 4. Save the image
             image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata)
     except (StopImageGenerationException, PromptFileReadError) as exc:
