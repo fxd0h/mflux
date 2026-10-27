@@ -120,3 +120,11 @@ def test_published_fibo2_and_qwen21_community_repos_pick_their_variant_by_name(r
     # The repo names write the version with hyphens (2-0, 2-1), which no alias matched, so the Edit Turbo and Turbo
     # repos ran as Dev and as the base model unless --base-model named them.
     assert ConfigResolution.infer_family_member(repo, default, family) is AVAILABLE_MODELS[key]
+
+
+@pytest.mark.fast
+def test_hyphenated_qwen21_controlnet_union_alias_is_an_exact_name():
+    # The hyphenated spelling is a valid --model and --base-model value, like the other 2-1 aliases.
+    name = "qwen-image-2-1-controlnet-union"
+    assert ModelConfig.from_name(model_name=name) is AVAILABLE_MODELS["qwen-image-2.1-controlnet-union"]
+    assert name in ConfigResolution.base_model_names()
