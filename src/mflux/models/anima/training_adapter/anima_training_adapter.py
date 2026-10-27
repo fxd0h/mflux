@@ -25,6 +25,8 @@ class AnimaTrainingAdapter(TrainingAdapter):
     # mflux all read.
 
     def __init__(self, *, model_config: ModelConfig, quantize: int | None, model_path: str | None = None):
+        if model_config.aliases[0] == "anima-turbo":
+            raise ValueError("Anima LoRAs are trained on Base: set \"model\": \"anima-base\" (Turbo is distilled, and \"anima\" is Turbo).")  # fmt: off
         self._model_config = model_config
         self._anima = Anima(quantize=quantize, model_config=model_config, model_path=model_path, bake_lora=False)
         self._guidance: float | None = None
@@ -36,6 +38,10 @@ class AnimaTrainingAdapter(TrainingAdapter):
         return self._anima.transformer
 
     def create_config(self, training_spec: TrainingSpec, *, width: int, height: int) -> Config:
+        # The LLM adapter runs once per caption in encode_data, before training, so a LoRA on it would never learn
+        adapter_targets = [t.module_path for t in training_spec.lora_layers.targets if t.module_path.startswith("llm_adapter")]  # fmt: off
+        if adapter_targets:
+            raise ValueError(f"Anima trains LoRAs on the transformer blocks only, not on {adapter_targets[0]}: the LLM adapter's output is computed once per caption.")  # fmt: off
         self._guidance = training_spec.guidance
         return Config(
             model_config=self._model_config,
@@ -140,6 +146,10 @@ class AnimaTrainingAdapter(TrainingAdapter):
         train_lora = TrainingUtil.get_train_lora(transformer, module_path)
         weights[f"diffusion_model.{module_path}.lora_A.weight"] = mx.transpose(train_lora.lora_A)
         weights[f"diffusion_model.{module_path}.lora_B.weight"] = mx.transpose(train_lora.lora_B)
+        # An alpha other than the rank trains at alpha / rank; the file keeps it so the LoRA loads at that strength.
+        # With the default (alpha = rank) the file has no alpha keys, like ai-toolkit's.
+        if train_lora.scale != 1.0:
+            weights[f"diffusion_model.{module_path}.alpha"] = mx.array(train_lora.scale * train_lora.lora_A.shape[1])
 
     def _assistant_disabled(self):
         return TrainingUtil.assistant_disabled(self._anima.transformer)

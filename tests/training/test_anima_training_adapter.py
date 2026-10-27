@@ -11,6 +11,7 @@ from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.training.lora.target_injector import inject_lora_targets
 from mflux.models.common.training.state.training_spec import BlockRange, LoraLayersSpec, LoraTargetSpec
+from mflux.models.common.training.utils import TrainingUtil
 
 AnimaTrainingAdapter = anima_adapter_module.AnimaTrainingAdapter
 
@@ -52,7 +53,9 @@ def test_the_schedule_is_anima_and_the_preview_uses_the_training_guidance(monkey
     adapter = AnimaTrainingAdapter(model_config=ModelConfig.anima_base(), quantize=None)
     monkeypatch.setattr(adapter, "_assistant_disabled", lambda: nullcontext())
 
-    config = adapter.create_config(SimpleNamespace(steps=30, guidance=4.0), width=512, height=512)
+    config = adapter.create_config(
+        SimpleNamespace(steps=30, guidance=4.0, lora_layers=LoraLayersSpec(targets=[])), width=512, height=512
+    )
     adapter.generate_preview_image(seed=7, prompt="bluxyz, a guitar", width=512, height=512, steps=30)
 
     assert config.scheduler.sigmas.shape[0] == 31
@@ -90,3 +93,42 @@ def test_gradient_checkpointing_keeps_the_output():
     plain = transformer(latents, mx.array([0.5]), context)
     transformer.gradient_checkpointing = True
     assert mx.allclose(transformer(latents, mx.array([0.5]), context), plain).item()
+
+
+@pytest.mark.fast
+def test_turbo_is_refused_for_training(monkeypatch):
+    monkeypatch.setattr(anima_adapter_module, "Anima", _FakeAnima)
+    with pytest.raises(ValueError, match="anima-base"):
+        AnimaTrainingAdapter(model_config=ModelConfig.from_name("anima"), quantize=None)
+
+
+@pytest.mark.fast
+def test_an_llm_adapter_target_is_refused(monkeypatch):
+    # The adapter output is computed once per caption before training, so its LoRA would never get a gradient
+    monkeypatch.setattr(anima_adapter_module, "Anima", _FakeAnima)
+    adapter = AnimaTrainingAdapter(model_config=ModelConfig.anima_base(), quantize=None)
+    spec = SimpleNamespace(steps=30, guidance=4.0, lora_layers=LoraLayersSpec(targets=[LoraTargetSpec(module_path="llm_adapter.out_proj", rank=4)]))  # fmt: off
+    with pytest.raises(ValueError, match="llm_adapter.out_proj"):
+        adapter.create_config(spec, width=512, height=512)
+
+
+@pytest.mark.fast
+def test_an_alpha_other_than_the_rank_is_saved_and_loads_at_the_same_strength(tmp_path):
+    transformer = AnimaTransformer(dim=128, num_blocks=1, num_heads=2, context_dim=64, adaln_lora_dim=32)
+    targets = [LoraTargetSpec(module_path="blocks.{block}.mlp.layer1", blocks=BlockRange(start=0, end=1), rank=8, alpha=4.0)]  # fmt: off
+    inject_lora_targets(transformer, targets)
+    trained = TrainingUtil.get_train_lora(transformer, "blocks.0.mlp.layer1")
+    trained.lora_B = mx.random.normal(trained.lora_B.shape, key=mx.random.key(2)) * 0.1
+    x = mx.random.normal((2, 128), key=mx.random.key(3))
+    expected = trained(x)
+    adapter = object.__new__(AnimaTrainingAdapter)
+    adapter._anima = SimpleNamespace(transformer=transformer)
+    path = tmp_path / "alpha.safetensors"
+
+    adapter.save_lora_adapter(path=path, training_spec=SimpleNamespace(lora_layers=LoraLayersSpec(targets=targets), model="anima-base"))  # fmt: off
+
+    assert float(mx.load(str(path))["diffusion_model.blocks.0.mlp.layer1.alpha"]) == pytest.approx(4.0)
+    fresh = AnimaTransformer(dim=128, num_blocks=1, num_heads=2, context_dim=64, adaln_lora_dim=32)
+    fresh.blocks[0].mlp.layer1.weight = trained.linear.weight
+    LoRALoader.load_and_apply_lora(AnimaLoRAMapping.get_mapping(), fresh, [str(path)], [1.0], bake_lora=False)
+    assert mx.allclose(fresh.blocks[0].mlp.layer1(x), expected, atol=1e-4).item()
