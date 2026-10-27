@@ -39,7 +39,28 @@ class Fibo2LoRAMapping:
             Fibo2LoRAMapping._target(f"perceiver.layers.{{block}}.{name}") for name in Fibo2LoRAMapping.PERCEIVER_LAYER
         ]
         targets += Fibo2LoRAMapping._comfy_targets()
+        targets += Fibo2LoRAMapping._norm_targets()
         return targets
+
+    @staticmethod
+    def _norm_targets() -> list[LoRATarget]:
+        # Extracted LoRAs (kohya, like Comfy-Org's turbo LoRA) also patch the norm weights directly (.diff). ComfyUI
+        # names the self-attention q and k norms q_norm and k_norm; the other norms have the same names.
+        names = [(f"{stack}.{norm}", f"{stack}.{norm}") for stack in ("noise_refiner.{block}", "layers.{block}") for norm in ("attention_norm1", "attention_norm2", "ffn_norm1", "ffn_norm2")]  # fmt: off
+        names += [(f"{stack}.attention.norm_{x}", f"{stack}.attention.{x}_norm") for stack in ("noise_refiner.{block}", "layers.{block}") for x in "qk"]  # fmt: off
+        names += [(f"layers.{{block}}.{norm}", f"layers.{{block}}.{norm}") for norm in ("cross_attn_norm1", "cross_attn_norm2", "cross_attention.norm_q", "cross_attention.norm_k")]  # fmt: off
+        names += [(f"perceiver.layers.{{block}}.{norm}", f"perceiver.layers.{{block}}.{norm}") for norm in ("cross_attn_norm", "self_attn_norm", "ffn_norm", "cross_attention.norm_q", "cross_attention.norm_k", "self_attention.norm_q", "self_attention.norm_k")]  # fmt: off
+        names += [("perceiver.norm_out", "perceiver.norm_out"), ("final_layer.norm", "final_layer.norm")]
+        prefixes = Fibo2LoRAMapping.PREFIXES
+        return [
+            LoRATarget(
+                model_path=path,
+                possible_up_patterns=[],
+                possible_down_patterns=[],
+                possible_diff_patterns=[f"{p}{source}.diff" for p in prefixes],
+            )  # fmt: off
+            for path, source in names
+        ]
 
     @staticmethod
     def _comfy_targets() -> list[LoRATarget]:
@@ -83,8 +104,12 @@ class Fibo2LoRAMapping:
         defaults = ("", ".default")
         return LoRATarget(
             model_path=model_path,
-            possible_up_patterns=[f"{p}{source}.lora_B{d}.weight" for p in prefixes for d in defaults],
-            possible_down_patterns=[f"{p}{source}.lora_A{d}.weight" for p in prefixes for d in defaults],
+            # PEFT names (lora_A/lora_B, as diffusers and ai-toolkit save) and kohya names (lora_down/lora_up)
+            possible_up_patterns=[f"{p}{source}.lora_B{d}.weight" for p in prefixes for d in defaults]
+            + [f"{p}{source}.lora_up.weight" for p in prefixes],  # fmt: off
+            possible_down_patterns=[f"{p}{source}.lora_A{d}.weight" for p in prefixes for d in defaults]
+            + [f"{p}{source}.lora_down.weight" for p in prefixes],  # fmt: off
             possible_alpha_patterns=[f"{p}{source}.alpha" for p in prefixes],
+            possible_diff_b_patterns=[f"{p}{source}.diff_b" for p in prefixes],
             up_transform=up_transform,
         )
