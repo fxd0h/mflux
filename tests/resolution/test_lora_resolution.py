@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -152,7 +153,7 @@ class TestLoraResolutionHuggingFace:
 
             result = LoraResolution.resolve(path="org/styles:style-b.safetensors")
 
-        assert result == str(cache_dir / "style-b.safetensors")
+        assert result == str(cache_dir / "org--styles--style-b.safetensors")
         assert mock_download.call_count == 2
         assert mock_download.call_args_list[0][1]["allow_patterns"] == ["style-b.safetensors"]
         assert mock_download.call_args_list[0][1]["local_files_only"] is True
@@ -167,7 +168,7 @@ class TestLoraResolutionHuggingFace:
             cache_dir,
         )
 
-        cached = cache_dir / "cached-style.safetensors"
+        cached = cache_dir / "org--styles--cached-style.safetensors"
         cached.write_bytes(b"x")
 
         with patch("mflux.models.common.resolution.lora_resolution.snapshot_download") as mock_download:
@@ -175,6 +176,43 @@ class TestLoraResolutionHuggingFace:
 
         assert result == str(cached)
         mock_download.assert_not_called()
+
+
+class TestLoraResolutionCacheLinks:
+    @staticmethod
+    def _repo(tmp_path, name: str, files: dict[str, bytes]):
+        snapshot = tmp_path / name
+        snapshot.mkdir()
+        for file, content in files.items():
+            (snapshot / file).write_bytes(content)
+        return snapshot
+
+    @pytest.mark.fast
+    def test_two_repos_with_the_same_file_name_keep_their_own_files(self, tmp_path, monkeypatch):
+        # MOSS's two turbo LoRAs are both lora.safetensors: the second used to resolve to the first one's link
+        cache_dir = tmp_path / "loras"
+        cache_dir.mkdir()
+        monkeypatch.setattr("mflux.models.common.resolution.lora_resolution.MFLUX_LORA_CACHE_DIR", cache_dir)
+        repos = {"org/a": self._repo(tmp_path, "a", {"lora.safetensors": b"A"}), "org/b": self._repo(tmp_path, "b", {"lora.safetensors": b"B"})}  # fmt: off
+
+        with patch("mflux.models.common.resolution.lora_resolution.snapshot_download") as mock_download:
+            mock_download.side_effect = lambda repo_id, **_: str(repos[repo_id])
+            first = LoraResolution.resolve(path="org/a:lora.safetensors")
+            second = LoraResolution.resolve(path="org/b:lora.safetensors")
+
+        assert Path(first).read_bytes() == b"A" and Path(second).read_bytes() == b"B"
+
+    @pytest.mark.fast
+    def test_the_named_file_is_taken_exactly(self, tmp_path, monkeypatch):
+        cache_dir = tmp_path / "loras"
+        cache_dir.mkdir()
+        monkeypatch.setattr("mflux.models.common.resolution.lora_resolution.MFLUX_LORA_CACHE_DIR", cache_dir)
+        snapshot = self._repo(tmp_path, "s", {"edit_lora.safetensors": b"E", "lora.safetensors": b"L"})
+
+        with patch("mflux.models.common.resolution.lora_resolution.snapshot_download", return_value=str(snapshot)):
+            result = LoraResolution.resolve(path="org/s:lora.safetensors")
+
+        assert Path(result).read_bytes() == b"L"
 
 
 class TestLoraResolutionError:

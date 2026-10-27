@@ -119,9 +119,15 @@ class LoraResolution:
         return LoraResolution._find_collection_file(repo_id, filename, local_files_only=True) is not None
 
     @staticmethod
-    def _linked_collection_path(filename: str) -> str | None:
+    def _link_name(repo_id: str, filename: str) -> str:
+        # One link per repo and file, so two repos with the same file name (MOSS's turbo LoRAs are both
+        # lora.safetensors) never resolve to each other's file
+        return f"{repo_id.replace('/', '--')}--{filename.replace('/', '--')}"
+
+    @staticmethod
+    def _linked_collection_path(repo_id: str, filename: str) -> str | None:
         cache_path = MFLUX_LORA_CACHE_DIR
-        cached_file_path = cache_path / filename
+        cached_file_path = cache_path / LoraResolution._link_name(repo_id, filename)
         if not cached_file_path.is_file():
             return None
         try:
@@ -136,7 +142,7 @@ class LoraResolution:
         cache_path = MFLUX_LORA_CACHE_DIR
         cache_path.mkdir(parents=True, exist_ok=True)
 
-        linked = LoraResolution._linked_collection_path(filename)
+        linked = LoraResolution._linked_collection_path(repo_id, filename)
         if linked is not None:
             return linked
 
@@ -149,7 +155,7 @@ class LoraResolution:
                     local_files_only=local_files_only,
                 )
             )
-            return LoraResolution._find_and_link_file(download_path, filename, cache_path)
+            return LoraResolution._find_and_link_file(download_path, repo_id, filename, cache_path)
         except (LocalEntryNotFoundError, FileNotFoundError):
             return None
 
@@ -263,25 +269,18 @@ class LoraResolution:
         raise FileNotFoundError(f"Could not find LoRA file '{filename}' in HuggingFace repo: {repo_id}")
 
     @staticmethod
-    def _find_and_link_file(download_path: Path, filename: str, cache_path: Path) -> str:
-        found_files = list(download_path.glob(f"**/*{filename}*"))
-        for file in found_files:
-            if file.is_file() and file.suffix in [".safetensors", ".bin"]:
-                if not filename.endswith(file.suffix):
-                    target_name = f"{filename}{file.suffix}"
-                else:
-                    target_name = filename
-
-                target_path = cache_path / target_name
-                if not target_path.exists():
-                    try:
-                        target_path.symlink_to(file)
-                    except (OSError, AttributeError):
-                        shutil.copy2(file, target_path)
-
-                return str(target_path)
-
-        raise FileNotFoundError(f"Could not find LoRA file '{filename}' in downloaded files")
+    def _find_and_link_file(download_path: Path, repo_id: str, filename: str, cache_path: Path) -> str:
+        # The file the user named, exactly: a pattern match would also take edit_lora.safetensors for lora.safetensors
+        file = download_path / filename
+        if not file.is_file() or file.suffix not in (".safetensors", ".bin"):
+            raise FileNotFoundError(f"Could not find LoRA file '{filename}' in downloaded files")
+        target_path = cache_path / LoraResolution._link_name(repo_id, filename)
+        if not target_path.exists():
+            try:
+                target_path.symlink_to(file)
+            except (OSError, AttributeError):
+                shutil.copy2(file, target_path)
+        return str(target_path)
 
     @staticmethod
     def get_registry() -> dict[str, Path]:
