@@ -226,6 +226,29 @@ def test_the_saved_lora_has_comfyui_keys_and_loads_back_at_its_strength(monkeypa
     assert mx.allclose(_Fake.output(reloaded.transformer()), expected, rtol=1e-5, atol=1e-4).item()
 
 
+def test_a_resumed_run_gets_each_module_back_at_its_own_rank(monkeypatch, tmp_path):
+    # The saved optimizer state has one entry per trained module at its rank: resuming from the fused ComfyUI file must
+    # give q, k, v, w1 and w3 their own down and up weights again, not the stacked ones
+    from mflux.models.common.training.lora.path_util import expand_module_paths_from_targets
+    from mflux.models.common.training.utils import TrainingUtil
+
+    adapter = _Fake.adapter(monkeypatch)
+    targets = _Fake.with_lora(adapter)
+    _Fake.randomize_lora_b(adapter.transformer())
+    spec = _Fake.training_spec(targets)
+    path = tmp_path / "adapter.safetensors"
+    adapter.save_lora_adapter(path=path, training_spec=spec)
+
+    resumed = Fibo2TrainingAdapter(model_config=ModelConfig.fibo2(), quantize=None)
+    resumed.load_lora_adapter(path=path)
+    for module_path, _, _ in expand_module_paths_from_targets(spec.lora_layers.targets):
+        trained = TrainingUtil.get_train_lora(adapter.transformer(), module_path)
+        loaded = TrainingUtil.get_train_lora(resumed.transformer(), module_path)
+        assert loaded.lora_A.shape == trained.lora_A.shape, module_path
+        assert mx.allclose(loaded.lora_A, trained.lora_A).item(), module_path
+        assert mx.allclose(loaded.lora_B, trained.lora_B * trained.scale, atol=1e-6).item(), module_path
+
+
 def test_the_feed_forward_is_padded_like_the_comfyui_repack():
     # Bria's 9536-wide feed-forward is stored 9728 wide in Comfy-Org's repack; the saved LoRA matches it
     from mflux.models.fibo2.training_adapter.fibo2_comfy_lora import Fibo2ComfyLoRA

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import math
 import random
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -35,8 +37,9 @@ class Fibo2TrainingAdapter(TrainingAdapter):
     The trainer noises the latent to (1 - sigma) * clean + sigma * noise, and the transformer, given sigma, predicts the
     velocity noise - clean, which is the loss target. Captions are encoded as at inference: a JSON caption cleaned and
     serialized compactly, a short description as it is, and a caption with text_render entries with the images of its
-    text, and without them above noise level 0.9. The LoRA is saved as diffusers saves it, keys and config prefixed
-    with "transformer." and lora_alpha in the metadata, so diffusers and Bria's examples load it.
+    text, and without them above noise level 0.9. The LoRA is saved in ComfyUI's layout (Fibo2ComfyLoRA): diffusion_model.*
+    keys, fused q/k/v, k/v and w13, alpha / rank folded into the up weights, and each module's rank in the metadata so a
+    resumed run gets its own layers back.
     """
 
     UNIFORM_SHARE = 0.1
@@ -139,13 +142,32 @@ class Fibo2TrainingAdapter(TrainingAdapter):
         for module_path, _, _ in expand_module_paths_from_targets(training_spec.lora_layers.targets):
             lora = TrainingUtil.get_train_lora(self._fibo2.transformer, module_path)
             loras[module_path] = (mx.transpose(lora.lora_A), mx.transpose(lora.lora_B), float(lora.scale))
+        ranks = {module_path: int(down.shape[0]) for module_path, (down, _, _) in loras.items()}
         mx.save_safetensors(
             str(path),
             Fibo2ComfyLoRA.weights(loras),
-            metadata={"format": "pt", "mflux_version": VersionUtil.get_mflux_version(), "model": training_spec.model},
+            metadata={
+                "format": "pt",
+                "mflux_version": VersionUtil.get_mflux_version(),
+                "model": training_spec.model,
+                Fibo2ComfyLoRA.RANKS_KEY: json.dumps(ranks),
+            },
         )
 
     def load_lora_adapter(self, *, path: str | Path) -> None:
+        # Resuming: a fused layer loaded as is would give every part the whole stacked down weight, so a run's own
+        # checkpoint is split back into its modules at their ranks, which the saved optimizer state matches
+        weights, metadata = mx.load(str(path), return_metadata=True)
+        ranks = metadata.get(Fibo2ComfyLoRA.RANKS_KEY)
+        if ranks is None:
+            self._load_train_lora(path)
+            return
+        with tempfile.TemporaryDirectory() as temp_dir:
+            split_path = Path(temp_dir) / "adapter.safetensors"
+            mx.save_safetensors(str(split_path), Fibo2ComfyLoRA.split(weights, json.loads(ranks)))
+            self._load_train_lora(split_path)
+
+    def _load_train_lora(self, path: str | Path) -> None:
         LoRALoader.load_and_apply_lora(
             lora_mapping=Fibo2LoRAMapping.get_mapping(),
             transformer=self._fibo2.transformer,

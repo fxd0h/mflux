@@ -208,7 +208,7 @@ mflux-train --config train.json
 
 The `.txt` next to each image holds its caption: a JSON caption, the form FIBO 2 was trained on, or a short description. mflux encodes it as it encodes a prompt: a JSON caption is cleaned and serialized compactly, and a caption with text in its `text_render` entries gets the images of that text, which the steps above noise level 0.9 leave out. The noise level of each step follows Bria's trainer: `sigmoid(N(shift, 1))` 90% of the time and uniform otherwise, with a shift of 0.5 at 256 image tokens that grows to 1.15 at 4096 (1024×1024). So `timestep_low`, `timestep_high` and `timestep_type` do not apply.
 
-A config for the 44 transformer layers, attention and feed-forward, with rank 16 and Bria's optimizer settings. Bria's trainer adapts all 415 linear layers; add targets for `noise_refiner`, `layers.{block}.cross_attention` (blocks 6, 14, 22, 30 and 38), `perceiver.layers`, `x_embedder`, `t_embedder` and `final_layer` to do the same:
+A config for the 44 transformer layers, attention and feed-forward, with rank 16 and Bria's optimizer settings. Bria's trainer adapts all 415 linear layers; add targets for `layers.{block}.adaLN_modulation.0`, `noise_refiner`, `layers.{block}.cross_attention` (blocks 6, 14, 22, 30 and 38), `perceiver.layers`, `x_embedder`, `t_embedder` and `final_layer` to do the same:
 
 ```json
 {
@@ -237,7 +237,7 @@ A config for the 44 transformer layers, attention and feed-forward, with rank 16
 
 `steps` and `guidance` are for the preview images; FIBO 2 Dev needs guidance for them. Once the captions are encoded, mflux encodes the preview prompts and lets the 8.7 GB Qwen3-VL text encoder go, unless a preview caption has `text_render` entries. The LoRA is saved with ComfyUI's keys and layout (`diffusion_model.*`, q, k and v in `attention.qkv`, the feed-forward gate and up in `w13`, padded to 9728), so it loads with `--lora` and in ComfyUI.
 
-On an M5 Max in bf16, with rank 16 on 410 linear layers at 512×512, gradient checkpointing and `cache_limit_gb: 2`, a step took 2.7 to 3.0 seconds, and a 12-step run peaked at 21 GB. Without `cache_limit_gb` MLX keeps freed buffers and the peak looks higher than the training needs. `"quantize": 8` trains over a quantized base.
+On an M5 Max in bf16, with rank 16 on all of those layers at 512×512, gradient checkpointing and `cache_limit_gb: 2`, a step took 2.7 to 3.0 seconds, and a 12-step run peaked at 21 GB. Without `cache_limit_gb` MLX keeps freed buffers and the peak looks higher than the training needs. `"quantize": 8` trains over a quantized base.
 
 ## Notes
 - **Implementation**: the transformer is the Z-Image block with gated cross-attention to the text encoder in five layers, and a Perceiver that turns the text encoder output into 256 to 512 "gist" tokens. mflux reuses the FLUX.2 VAE, the Z-Image feed-forward, timestep, RoPE and final layers, and the shared Qwen3-VL language model and vision tower (also used by Qwen-Image 2.1), with 3D positions and deepstack features for images. The port follows the [diffusers implementation](https://github.com/huggingface/diffusers/tree/main/src/diffusers/pipelines/bria_fibo2) and matches its transformer and text encoder in float32. `tests/test_fibo2_parity.py` checks the transformer against a small diffusers model and the text encoder against `transformers`, layer by layer.

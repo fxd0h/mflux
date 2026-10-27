@@ -10,6 +10,8 @@ class Fibo2ComfyLoRA:
     # stacked exactly: their down weights one above the other and their up weights block-diagonal, so each part keeps
     # its own delta and the fused rank is the sum. Each part's alpha / rank is folded into its up weight.
     PADDED_FFN = 9728
+    # Metadata key with each trained module's rank, so a resumed run splits the fused layers back exactly
+    RANKS_KEY = "mflux_lora_ranks"
 
     @staticmethod
     def weights(loras: dict[str, tuple[mx.array, mx.array, float]]) -> dict[str, mx.array]:
@@ -65,3 +67,29 @@ class Fibo2ComfyLoRA:
         if name.endswith(("feed_forward.w2", "ffn.w2")) and down.shape[1] == Fibo2LoRAMapping.FFN_HIDDEN:
             down = mx.pad(down, [(0, 0), (0, Fibo2ComfyLoRA.PADDED_FFN - down.shape[1])])
         return down, up
+
+    @staticmethod
+    def split(weights: dict[str, mx.array], ranks: dict[str, int]) -> dict[str, mx.array]:
+        # The inverse of weights() for a run's own checkpoint: each module gets back its own down and up weights at its
+        # own rank (alpha / rank stays folded into up), under the names Fibo2LoRAMapping reads as unfused layers
+        groups: dict[str, list[tuple[int, int, str, int]]] = {}
+        for path, rank in ranks.items():
+            name, index, count = Fibo2ComfyLoRA._comfy_name(path)
+            groups.setdefault(name, []).append((index, count, path, rank))
+        out = {}
+        for name, parts in groups.items():
+            down = weights[f"diffusion_model.{name}.lora_A.weight"]
+            up = weights[f"diffusion_model.{name}.lora_B.weight"]
+            block = up.shape[0] // parts[0][1]
+            ffn = name.endswith(("feed_forward.w13", "ffn.w13"))
+            rows = Fibo2LoRAMapping.FFN_HIDDEN if ffn and block == Fibo2ComfyLoRA.PADDED_FFN else block
+            column = 0
+            for index, _, path, rank in sorted(parts):
+                part_down = down[column : column + rank]
+                if name.endswith(("feed_forward.w2", "ffn.w2")) and part_down.shape[1] == Fibo2ComfyLoRA.PADDED_FFN:
+                    part_down = part_down[:, : Fibo2LoRAMapping.FFN_HIDDEN]
+                source = f"transformer.{Fibo2LoRAMapping.diffusers_name(path)}"
+                out[f"{source}.lora_A.weight"] = part_down
+                out[f"{source}.lora_B.weight"] = up[index * block : index * block + rows, column : column + rank]
+                column += rank
+        return out
