@@ -1,4 +1,5 @@
 import copy
+import json
 import sys
 import warnings
 
@@ -173,3 +174,27 @@ class TestAnimaResolution:
     def test_the_card_defaults(self):
         assert Anima.DEFAULT_GUIDANCE == {"anima-turbo": 1.0, "anima-aesthetic": 4.0, "anima-base": 4.0}
         assert {key: ui_defaults.MODEL_INFERENCE_STEPS[key] for key in Anima.DEFAULT_STEPS} == Anima.DEFAULT_STEPS
+
+
+@pytest.mark.fast
+class TestAnimaReplay:
+    @pytest.mark.parametrize(("recorded", "expected"), [({"sampler": "euler"}, "euler"), ({}, "er_sde")])
+    def test_a_sidecar_replays_its_sampler(self, run_cli, tmp_path, recorded, expected):
+        # --make-conf records the sampler; a sidecar from 0.24.0 has none and runs the default
+        sidecar = tmp_path / "image.metadata.json"
+        sidecar.write_text(json.dumps({"prompt": "1girl", "seed": 1, **recorded}))
+        model, _ = run_cli("-C", str(sidecar))
+        assert model.generated[0]["scheduler"] == expected
+
+    def test_the_flag_overrides_the_sidecar_sampler(self, run_cli, tmp_path):
+        sidecar = tmp_path / "image.metadata.json"
+        sidecar.write_text(json.dumps({"prompt": "1girl", "seed": 1, "sampler": "euler"}))
+        model, _ = run_cli("-C", str(sidecar), "--scheduler", "er_sde")
+        assert model.generated[0]["scheduler"] == "er_sde"
+
+    def test_an_unknown_recorded_sampler_fails_before_the_model_loads(self, run_cli, tmp_path):
+        sidecar = tmp_path / "image.metadata.json"
+        sidecar.write_text(json.dumps({"prompt": "1girl", "seed": 1, "sampler": "dpm"}))
+        with pytest.raises(ValueError, match="Unknown Anima sampler 'dpm'"):
+            run_cli("-C", str(sidecar))
+        assert _StubAnima.instances == []

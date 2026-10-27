@@ -21,6 +21,7 @@ from torch.nn import functional as F
 from mflux.models.anima.anima_initializer import AnimaInitializer
 from mflux.models.anima.model.anima_scheduler import AnimaSampler, AnimaScheduler
 from mflux.models.anima.model.anima_text_encoder.anima_prompt_encoder import AnimaPromptEncoder
+from mflux.models.anima.model.anima_text_encoder.anima_prompt_weights import AnimaPromptWeights
 from mflux.models.anima.model.anima_transformer.anima_llm_adapter import AnimaLLMAdapter
 from mflux.models.anima.model.anima_transformer.anima_transformer import AnimaTransformer
 from mflux.models.anima.weights.anima_lora_mapping import AnimaLoRAMapping
@@ -501,3 +502,36 @@ class TestAnimaLoRAMapping:
         assert paths == [str(lora_file)] and scales == [1.0]
         for path, weight in before.items():
             assert not mx.array_equal(_module_at(model, path).weight, weight), path
+
+
+@pytest.mark.fast
+class TestAnimaPromptWeights:
+    # Expected parts follow ComfyUI's token_weights on the same strings (its tokenizer gives the same ids per part)
+    @pytest.mark.parametrize(
+        ("prompt", "parts"),
+        [
+            ("1girl, smile", [("1girl, smile", 1.0)]),
+            ("1girl, (smile:1.3), x", [("1girl, ", 1.0), ("smile", 1.3), (", x", 1.0)]),
+            ("((red eyes))", [("red eyes", pytest.approx(1.21))]),
+            ("(nested (inner:1.2) outer:0.8)", [("nested ", 0.8), ("inner", 1.2), (" outer", 0.8)]),
+            ("\\(literal\\) (a:2)", [("(literal) ", 1.0), ("a", 2.0)]),
+            ("(tag:x)", [("tag:x", pytest.approx(1.1))]),
+            ("", []),
+        ],
+    )
+    def test_parse_matches_comfyui(self, prompt, parts):
+        assert AnimaPromptWeights.parse(prompt) == parts
+
+    def test_only_an_unweighted_single_part_takes_the_plain_path(self):
+        assert AnimaPromptWeights.is_plain(AnimaPromptWeights.parse("1girl, smile"))
+        assert AnimaPromptWeights.is_plain(AnimaPromptWeights.parse(""))
+        assert not AnimaPromptWeights.is_plain(AnimaPromptWeights.parse("1girl, (smile:1.0)"))
+
+    def test_weights_scale_the_adapter_output_of_their_tokens(self):
+        model = AnimaTransformer(dim=128, num_blocks=1, num_heads=2, context_dim=64, adaln_lora_dim=32)
+        hidden = mx.random.normal((1, 5, 64), key=mx.random.key(0))
+        ids = mx.array([[3, 7, 9, 1]])
+        plain = model.encode_text(hidden, ids)
+        weighted = model.encode_text(hidden, ids, mx.array([1.0, 2.0, 1.0, 1.0]))
+        assert mx.allclose(weighted[:, 1], 2 * plain[:, 1], atol=1e-2)
+        assert mx.array_equal(weighted[:, 0], plain[:, 0]) and mx.array_equal(weighted[:, 4:], plain[:, 4:])

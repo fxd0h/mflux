@@ -114,7 +114,7 @@ class Anima(nn.Module):
             lora_scales=self.lora_scales,
             negative_prompt=negative_prompt,
             generation_time=config.time_steps.format_dict["elapsed"],
-            generation_parameters=self.compute_precision.generation_parameters(),
+            generation_parameters={"sampler": sampler_name, **self.compute_precision.generation_parameters()},
         )
 
     def save_model(self, base_path: str) -> None:

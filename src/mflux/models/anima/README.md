@@ -44,8 +44,7 @@ at CFG 4 to 5). Base is the version to train LoRAs on; it has a plainer default 
 - At guidance 1.0 there is no unconditional pass, so a negative prompt has no effect.
 - `--scheduler` takes `er_sde` (the default, the model card's choice) or `euler`. The sigma schedule is
   ComfyUI's "simple" schedule on Anima's flow sampling (shift 3).
-- `--config-from-metadata` replays the variant, steps, guidance, seed and prompts. It does not replay
-  `--scheduler euler`; pass it again.
+- `--config-from-metadata` replays the variant, steps, guidance, seed, prompts and sampler.
 
 ### Prompting
 
@@ -58,8 +57,10 @@ The model card describes the prompt format in detail. In short:
   artifacts, chromatic aberration`.
 - Artists take an `@` prefix (`@artist name`). Safety tags are `safe`, `sensitive`, `nsfw` and `explicit`; the card
   advises them in the positive and negative prompts.
-- The prompt goes to the encoders as written. ComfyUI's weighting syntax (`(chibi:2)`) is not parsed, and a tag with
-  parentheses such as `fern (sousou no frieren)` needs no backslashes.
+- ComfyUI's weighting works as in ComfyUI: `(chibi:1.3)` sets a weight, `(chibi)` is 1.1 and nesting multiplies.
+  The weight scales what the LLM adapter makes of those tokens, and the parentheses are not part of the prompt the
+  encoders read, so a prompt from ComfyUI gives the same conditioning. A tag with parentheses in its name needs
+  backslashes, as in ComfyUI: `fern \(sousou no frieren\)`.
 
 ## Quantization and saving
 

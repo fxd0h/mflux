@@ -61,11 +61,14 @@ class AnimaTransformer(nn.Module):
         # Only the blocks: the LLM adapter has its own attention class and keeps the model's precision.
         precision.apply(self, (AnimaAttention, AnimaFeedForward))
 
-    def encode_text(self, hidden_states: mx.array, t5_ids: mx.array) -> mx.array:
+    def encode_text(self, hidden_states: mx.array, t5_ids: mx.array, t5_weights: mx.array | None = None) -> mx.array:
         # The context the blocks attend to: the adapter output, zero-padded to 512 tokens like the reference.
         # The padding is part of the conditioning: the zero keys still take a share of every softmax.
         # The adapter runs in the dtype of the hidden states; the context comes back in the blocks' dtype.
+        # Prompt weights, "(tag:1.3)", scale the output for each T5 token as ComfyUI does.
         context = self.llm_adapter(hidden_states, t5_ids)
+        if t5_weights is not None:
+            context = context * t5_weights.astype(context.dtype)[None, :, None]
         missing = AnimaTransformer.MIN_CONTEXT_LENGTH - context.shape[1]
         if missing > 0:
             context = mx.pad(context, [(0, 0), (0, missing), (0, 0)])
