@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gc
+import random
 from pathlib import Path
 
 import mlx.core as mx
@@ -41,6 +42,17 @@ class TrainingRunner:
         # Ensure any assistant LoRA(s) do not affect inference outputs after training.
         for lora in TrainingUtil.iter_assistant_loras(transformer):
             lora.scale = 0.0
+
+    @staticmethod
+    def _check_timestep_options(adapter: TrainingAdapter, training_spec: TrainingSpec) -> None:
+        # An adapter that draws its own noise levels has no grid for the timestep options to select from
+        loop = training_spec.training_loop
+        timestep_options = loop.timestep_low != 0 or loop.timestep_high is not None or loop.timestep_type is not None
+        if timestep_options and adapter.sample_sigma(rng=random.Random(0), image_seq_len=4096) is not None:
+            raise ValueError(
+                f"{training_spec.model} draws the noise level of each step itself: remove timestep_low, timestep_high "
+                "and timestep_type from training_loop."
+            )
 
     @staticmethod
     def _apply_low_ram_tiling(model) -> None:
@@ -118,6 +130,8 @@ class TrainingRunner:
             )
         else:
             raise ValueError("Flux1 training is no longer supported.")
+
+        TrainingRunner._check_timestep_options(adapter, training_spec)
 
         if training_spec.low_ram:
             TrainingRunner._apply_low_ram_tiling(adapter.model())
@@ -206,8 +220,7 @@ class TrainingRunner:
             dataset = Dataset(encoded_data)
         # With the dataset encoded, an adapter that can serve its previews from prompts encoded now lets its text
         # encoder go: training never runs it again (FIBO 2's Qwen3-VL is 8.7 GB)
-        release_text_encoder = getattr(adapter, "release_text_encoder", None)
-        if release_text_encoder is not None and release_text_encoder(training_spec):
+        if adapter.release_text_encoder(training_spec):
             gc.collect()
             mx.clear_cache()
         iterator = Iterator.from_spec(training_spec=training_spec, dataset=dataset)
