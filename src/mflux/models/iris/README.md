@@ -93,7 +93,7 @@ On an M5 Max at 1024×1024 that takes about 1 second per step and 8 to 9 seconds
 mflux-train --config train.json
 ```
 
-Iris works on pixels, so a training image is used as it is, with no VAE. The noise levels are an even grid from pure noise, shifted by resolution as the [reference trainer](https://github.com/speridlabs/iris-3b) shifts them: 2 at 256×256, 3 at 512×512 and 4 at 1024×1024. Each image gets the shift of its own size. Leave `timestep_type` unset to draw uniformly from that grid. The reference trainer draws from a logit-normal distribution (`"timestep_type": "sigmoid"`), which rarely reaches the highest noise levels. In our style tests it learned the colors less reliably: see the numbers below.
+Iris works on pixels, so a training image is used as it is, with no VAE. The noise levels are an even grid from pure noise, shifted by resolution as the [reference trainer](https://github.com/speridlabs/iris-3b) shifts them: 2 at 256×256, 3 at 512×512 and 4 at 1024×1024. Each image gets the shift of its own size. Leave `timestep_type` unset to draw uniformly from that grid. The reference trainer draws from a logit-normal distribution (`"timestep_type": "sigmoid"`), which rarely reaches the highest noise levels. In our style tests it learned the colors less reliably (numbers below); on a character dataset the two came out the same.
 
 A config for the 24 transformer blocks with rank 16, the layers ai-toolkit trains. All 311 linear layers can take a target:
 
