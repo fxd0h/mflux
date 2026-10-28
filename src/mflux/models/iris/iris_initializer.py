@@ -95,9 +95,11 @@ class IrisInitializer:
             bake_lora=bake_lora,
             dense_weights=weights.dense_component("transformer"),
         )
-        # A few-step LoRA distilled from the base model switches the base model to its sampler, and says so
-        model.few_step = IrisFewStepScheduler.from_lora_files(model.lora_paths, model.lora_scales)
-        if model.few_step is not None and model.model_config.supports_guidance:
+        # A few-step LoRA distilled from the base model switches the base model to its sampler, and says so. Turbo
+        # always runs its own 4-step sampler, so there the LoRA changes only the weights
+        is_base = model.model_config.supports_guidance
+        model.few_step = IrisFewStepScheduler.from_lora_files(model.lora_paths, model.lora_scales) if is_base else None
+        if model.few_step is not None:
             steps, shift = model.few_step
             print(f"⏩ Few-step LoRA (turbo_steps={steps}, shift={shift} in its metadata): the base model runs {steps} steps without CFG; --steps still applies, --guidance and --negative-prompt do not.")  # fmt: off
 

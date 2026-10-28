@@ -184,6 +184,28 @@ def test_the_initializer_records_the_loras_on_the_model(tmp_path, capsys):
     assert "Few-step LoRA" not in capsys.readouterr().out
 
 
+def test_turbo_with_a_few_step_lora_keeps_its_own_sampler_and_can_be_saved(tmp_path, capsys, monkeypatch):
+    from types import SimpleNamespace
+
+    from mflux.models.common.weights.saving.model_saver import ModelSaver
+    from mflux.models.iris.iris_initializer import IrisInitializer
+    from mflux.models.iris.variants.txt2img.iris import Iris
+
+    turbo = tmp_path / "student.safetensors"
+    mx.save_safetensors(str(turbo), {"t_embedder.mlp.0.lora_down": mx.zeros((2, 256)), "t_embedder.mlp.0.lora_up": mx.zeros((128, 2))}, metadata={"extra": json.dumps({"turbo_steps": 4, "shift": 4.0})})  # fmt: off
+    model = Iris.__new__(Iris)
+    nn.Module.__init__(model)
+    model.transformer = _tiny_transformer()
+    model.model_config = ModelConfig.iris_3b()
+    IrisInitializer._apply_loras(model, SimpleNamespace(dense_component=lambda name: None), [str(turbo)], [1.0], True)  # noqa: ARG005
+    assert model.few_step is None and "Few-step LoRA" not in capsys.readouterr().out
+    model.bits = None
+    saved = []
+    monkeypatch.setattr(ModelSaver, "save_model", staticmethod(lambda **kwargs: saved.append(kwargs)))
+    model.save_model(str(tmp_path / "saved"))
+    assert len(saved) == 1
+
+
 def test_a_model_with_a_few_step_lora_cannot_be_saved(tmp_path):
     # The saved weights would keep the LoRA, but nothing would record its sampler
     from mflux.models.iris.variants.txt2img.iris import Iris
