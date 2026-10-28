@@ -84,6 +84,10 @@ def _with_lora(transformer: IrisTransformer) -> IrisTransformer:
 def test_the_schedule_is_the_reference_shift_for_the_resolution():
     assert IrisTrainingSchedule.shift(512, 512) == pytest.approx(3.0)
     assert IrisTrainingSchedule.shift(1024, 1024) == pytest.approx(4.0)
+    # Small images, which the loader accepts, get no shift instead of a zero one that divides 0 by 0
+    assert IrisTrainingSchedule.shift(64, 64) == IrisTrainingSchedule.shift(32, 32) == 1.0
+    small = IrisTrainingSchedule(SimpleNamespace(num_inference_steps=4, height=64, width=64)).sigmas.tolist()
+    assert small == pytest.approx([1.0, 0.75, 0.5, 0.25, 0.0])
     config = SimpleNamespace(num_inference_steps=4, height=512, width=512)
     # raw 1, 0.75, 0.5, 0.25 shifted by 3: 3s / (1 + 2s)
     assert IrisTrainingSchedule(config).sigmas.tolist() == pytest.approx([1.0, 0.9, 0.75, 0.5, 0.0])

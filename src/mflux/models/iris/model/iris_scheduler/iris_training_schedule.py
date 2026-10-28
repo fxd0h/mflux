@@ -28,7 +28,9 @@ class IrisTrainingSchedule(BaseScheduler):
 
     @staticmethod
     def shift(height: int, width: int) -> float:
-        return 2.0 + math.log2(math.sqrt(height * width) / 256)
+        # The reference covers 256 to 1024. Below 128x128 the formula drops under 1 and reaches 0 at 64x64, which
+        # divides 0 by 0 at the top of the grid, so smaller images get no shift
+        return max(1.0, 2.0 + math.log2(math.sqrt(height * width) / 256))
 
     def step(self, noise: mx.array, timestep: int, latents: mx.array, **kwargs) -> mx.array:  # noqa: ARG002
         # Euler on the flow, for completeness; training only reads the sigmas
