@@ -84,7 +84,7 @@ mflux-generate-iris \
   --seed 42
 ```
 
-On an M5 Max at 1024×1024 that takes about 1 second per step and 8 to 9 seconds for the whole run, loading included,, against 2.6 seconds per step for the base model with CFG.
+On an M5 Max at 1024×1024 that takes about 1 second per step and 8 to 9 seconds for the whole run, loading included, against 2.6 seconds per step for the base model with CFG.
 
 ## Quantization
 `-q 4` and `-q 8` quantize the model when it loads, the transformer and the text encoder. Small layers (the pixel-stage embedder, MLPs and head, the 12-to-1 layer pooling) and the feed-forward output projections, whose input width of 6826 is not a multiple of the quantization group size, stay in bf16. At `-q 4` and below the per-pixel adaLN projections of the pixel stage (2560 to 16384, they set individual pixel values) stay in bf16 too: quantized to 4 bits they print a faint screen-door grain over flat areas and fur. Measured on an M4 Pro (64 GB), Turbo, 1024×1024, seed 42. The transformer and the text encoder are both in memory while the weights load and the prompt is encoded; mflux then releases the text encoder, which is why the peak while generating is lower. The PSNR compares each image with the unquantized one: the composition is the same, the fine detail differs, and `-q 4` is visibly softer.
@@ -118,9 +118,9 @@ The saved directory holds the transformer, the text encoder and the tokenizer, s
 ## Notes
 - The prompt is wrapped in the chat template the model was trained with and limited to 300 tokens in total. The template takes 5 of them, so a caption is cut after 295 tokens.
 - Sizes must be multiples of 16. Turbo was trained at about one megapixel: much smaller sizes show 16×16 patch artifacts, in the reference implementation too.
-- `mflux-generate-iris` has no `--scheduler`, LoRA, `--compute-precision` or `--vae-tiling` options: the model has no VAE and the samplers are part of the checkpoints. The transformer runs the attention queries and keys in float32; with bf16 queries and keys, single patches of flat regions came out visibly off.
+- `mflux-generate-iris` has no `--scheduler`, `--compute-precision` or `--vae-tiling` options: the model has no VAE and the samplers are part of the checkpoints. The transformer runs the attention queries and keys in float32; with bf16 queries and keys, single patches of flat regions came out visibly off.
 - Both entries share one Hugging Face repository. `--model iris-3b` (default, aliases `iris-3b-turbo`, `iris-turbo`, `iris`) selects Turbo, `--model iris-3b-base` (alias `iris-base`) the base model.
-- Not ported from the reference implementation: depth estimation and the upscaler fine-tunes, the community Turbo LoRA, and training. `mflux-train` is not available for this model.
+- Not ported from the reference implementation: depth estimation and the upscaler fine-tunes, and training. `mflux-train` is not available for this model.
 - Slow golden tests are not part of this port; `tests/` holds fast tests for the weight mapping, quantization, prompt encoding, samplers, CLI and saving.
 
 ## License and attribution
