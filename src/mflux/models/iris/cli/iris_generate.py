@@ -81,7 +81,7 @@ def main():
     steps = args.steps
     if model.few_step is not None and getattr(args, "steps_is_default", False):
         steps = None
-    if model.few_step is not None and model_config.supports_guidance:
+    if model.few_step is not None:
         CommandLineParser.warn_ignored_options({
             "--guidance": "a few-step LoRA has its guidance distilled in and runs without CFG.",
             "--negative-prompt": "a few-step LoRA runs without CFG, so the negative prompt is never encoded.",
