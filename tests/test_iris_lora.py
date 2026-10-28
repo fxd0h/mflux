@@ -144,6 +144,12 @@ class TestIrisFewStepScheduler:
         # At scale 0 the LoRA changes no weight, so it does not change the sampler
         assert IrisFewStepScheduler.from_lora_files([str(turbo)], [0.0]) is None
 
+    @pytest.mark.parametrize("extra", ["null", "[4]", '"turbo_steps"', "not json"])
+    def test_extra_metadata_that_is_not_an_object_records_no_sampler(self, tmp_path, extra):
+        path = tmp_path / "other.safetensors"
+        mx.save_safetensors(str(path), {"a": mx.zeros((1,))}, metadata={"extra": extra})
+        assert IrisFewStepScheduler.from_lora_files([str(path)]) is None
+
     @pytest.mark.parametrize("extra", [{"turbo_steps": 0}, {"turbo_steps": -2}, {"turbo_steps": 4, "shift": 0}, {"turbo_steps": 10**9}, {"turbo_steps": "four"}])  # fmt: off
     def test_invalid_few_step_metadata_is_refused(self, tmp_path, extra):
         path = tmp_path / "bad.safetensors"

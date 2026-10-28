@@ -59,9 +59,10 @@ class IrisFewStepScheduler:
             length = struct.unpack("<Q", file.read(8))[0]
             header = json.loads(file.read(length))
         metadata = dict(header.get("__metadata__") or {})
-        if "extra" in metadata:
-            try:
-                metadata["extra"] = json.loads(metadata["extra"])
-            except (TypeError, ValueError):
-                metadata["extra"] = {}
+        # extra is free-form JSON: anything but an object ("null", a list) records no sampler
+        try:
+            extra = json.loads(metadata.get("extra", "{}"))
+        except (TypeError, ValueError):
+            extra = {}
+        metadata["extra"] = extra if isinstance(extra, dict) else {}
         return metadata
