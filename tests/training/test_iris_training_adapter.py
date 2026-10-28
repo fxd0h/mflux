@@ -40,9 +40,17 @@ class _FakeIris(nn.Module):
         self.prompt_cache = {}
         self.generated = None
 
+    def _encode_prompt(self, prompt):
+        if prompt not in self.prompt_cache:
+            if self.text_encoder is None:
+                raise AssertionError(f"no text encoder to encode {prompt!r}")
+            self.prompt_cache[prompt] = (mx.full((1, 2), len(prompt)), mx.ones((1, 2)))
+        return self.prompt_cache[prompt]
+
     def generate_image(self, **kwargs):
         self.generated = kwargs
-        self.prompt_cache["preview"] = (mx.zeros((1,)), mx.zeros((1,)))
+        self._encode_prompt(kwargs["prompt"])
+        self._encode_prompt("")
         return SimpleNamespace(image="preview-image")
 
 
@@ -211,7 +219,9 @@ def test_the_conditioning_goes_through_the_low_ram_data_cache(monkeypatch, tmp_p
     adapter._iris.transformer = _tiny_transformer()
     sigmas = mx.array([1.0, 0.5, 0.0])
     expected = adapter.predict_noise(t=1, latents_t=image, sigmas=sigmas, cond=cond, config=None)
-    assert mx.allclose(adapter.predict_noise(t=1, latents_t=clean, sigmas=sigmas, cond=loaded, config=None), expected).item()
+    assert mx.allclose(
+        adapter.predict_noise(t=1, latents_t=clean, sigmas=sigmas, cond=loaded, config=None), expected
+    ).item()
 
 
 def test_a_resumed_lora_trains_at_its_saved_scale(monkeypatch, tmp_path):
@@ -228,3 +238,18 @@ def test_a_resumed_lora_trains_at_its_saved_scale(monkeypatch, tmp_path):
     loaded = TrainingUtil.get_train_lora(resumed.transformer(), "t_embedder.linear_1")
     assert trained.scale == loaded.scale == pytest.approx(2.0)
     assert mx.array_equal(loaded.lora_B, trained.lora_B).item() and mx.array_equal(loaded.lora_A, trained.lora_A).item()
+
+
+def test_releasing_the_text_encoder_keeps_the_previews_working(monkeypatch):
+    adapter = _adapter(monkeypatch)
+    spec = SimpleNamespace(monitoring=SimpleNamespace(preview_prompts=["a fox", "a bluxyz lighthouse"]))
+    assert adapter.release_text_encoder(spec)
+    assert adapter._iris.text_encoder is None and adapter._iris.prompt_cache == {}
+    adapter.freeze_base()
+    assert (
+        adapter.generate_preview_image(seed=1, prompt="a bluxyz lighthouse", width=64, height=64, steps=4)
+        == "preview-image"
+    )
+    # The encodings stay on the adapter, never in the model's cache, where training would treat them as parameters
+    assert adapter._iris.prompt_cache == {}
+    assert sorted(adapter._preview_encodings) == ["", "a bluxyz lighthouse", "a fox"]

@@ -32,6 +32,8 @@ class IrisTrainingAdapter(TrainingAdapter):
         self._model_config = model_config
         self._iris = Iris(quantize=quantize, model_config=model_config, model_path=model_path, bake_lora=False)
         self._guidance: float | None = None
+        # The preview prompts' encodings once the text encoder is gone (release_text_encoder)
+        self._preview_encodings: dict[str, tuple[mx.array, mx.array]] = {}
 
     def model(self):
         return self._iris
@@ -53,7 +55,8 @@ class IrisTrainingAdapter(TrainingAdapter):
 
     def freeze_base(self) -> None:
         self._iris.transformer.freeze()
-        self._iris.text_encoder.freeze()
+        if self._iris.text_encoder is not None:  # gone after release_text_encoder
+            self._iris.text_encoder.freeze()
 
     def set_gradient_checkpointing(self, enabled: bool) -> None:
         self._iris.transformer.gradient_checkpointing = enabled
@@ -94,6 +97,8 @@ class IrisTrainingAdapter(TrainingAdapter):
         steps: int,
         image_paths: list[Path | str] | None = None,  # noqa: ARG002
     ):
+        # After release_text_encoder, the prompts come from the encodings kept then
+        self._iris.prompt_cache = dict(self._preview_encodings)
         with TrainingUtil.assistant_disabled(self._iris.transformer):
             image = self._iris.generate_image(
                 seed=seed, prompt=prompt, num_inference_steps=steps, height=height, width=width, guidance=self._guidance
@@ -101,6 +106,19 @@ class IrisTrainingAdapter(TrainingAdapter):
         # The cache lives on the module, so its encodings would become trainable parameters of model()
         self._iris.prompt_cache = {}
         return image.image
+
+    def release_text_encoder(self, training_spec: TrainingSpec) -> bool:
+        # Encodes the preview prompts and the empty negative of CFG now, keeps them on the adapter, and drops the 8.9 GB
+        # Qwen3-VL text encoder, which training never runs again. The encodings live here, not in the model's prompt
+        # cache, which training would treat as parameters.
+        monitoring = training_spec.monitoring
+        prompts = list(monitoring.preview_prompts) if monitoring is not None else []
+        for prompt in [*prompts, ""]:
+            self._preview_encodings[prompt] = self._iris._encode_prompt(prompt)
+        mx.eval(list(self._preview_encodings.values()))
+        self._iris.prompt_cache = {}
+        self._iris.text_encoder = None
+        return True
 
     def save_lora_adapter(self, *, path: Path, training_spec: TrainingSpec) -> None:
         weights: dict[str, mx.array] = {}
@@ -138,9 +156,6 @@ class IrisTrainingAdapter(TrainingAdapter):
     @staticmethod
     def _append_train_lora_weights(weights: dict[str, mx.array], transformer, module_path: str) -> None:
         train_lora = TrainingUtil.get_train_lora(transformer, module_path)
-        name = f"diffusion_model.{IrisLoRAMapping.reference_name(module_path)}"
-        weights[f"{name}.lora_A.weight"] = mx.transpose(train_lora.lora_A)
-        weights[f"{name}.lora_B.weight"] = mx.transpose(train_lora.lora_B)
-        # An alpha other than the rank trains at alpha / rank; the file keeps it so the LoRA loads at that strength
-        if train_lora.scale != 1.0:
-            weights[f"{name}.alpha"] = mx.array(train_lora.scale * train_lora.lora_A.shape[1])
+        weights.update(
+            TrainingUtil.lora_weights(f"diffusion_model.{IrisLoRAMapping.reference_name(module_path)}", train_lora)
+        )

@@ -125,7 +125,7 @@ MFLUX supports the following model families. They have different strengths and w
 |[Krea 2](src/mflux/models/krea2/README.md) | Jun 2026 | 12B | Turbo (distilled) | No | Very good quality with a wide range of styles; good for creative exploration. |
 |[FLUX.2](src/mflux/models/flux2/README.md) | Jan 2026 | 4B & 9B | Distilled & Base | Yes | Fastest + smallest with very good quality and edit capabilities. |
 |[FLUX 3 Image Klein](src/mflux/models/flux3/README.md) | Oct 2026 | 5.6B (+4B TE) | Distilled & Base | No | Text-to-image and editing with up to 10 reference images in one model; bounding-box layouts, strong text rendering. 16 steps distilled, 50 steps Base. |
-|[Iris-3B](src/mflux/models/iris/README.md) | Oct 2026 | 3B (+4B TE) | Turbo (distilled) & Base | No | Pixel-space diffusion transformer: no VAE, direct RGB generation. 4 steps Turbo, 100 steps base. |
+|[Iris-3B](src/mflux/models/iris/README.md) | Oct 2026 | 3B (+4B TE) | Turbo (distilled) & Base | Yes | Pixel-space diffusion transformer: no VAE, direct RGB generation. 4 steps Turbo, 100 steps base. |
 |[Ideogram 4](src/mflux/models/ideogram4/README.md) | Jun 2026 | 9B | Base | No | JSON-caption-native, typography-focused text-to-image generation. |
 |[ERNIE-Image](src/mflux/models/ernie_image/README.md) | Apr 2026 | 8B | Distilled & Base | No | Single-stream DiT from Baidu. Vivid, high-contrast output. |
 |[Lens](src/mflux/models/lens/README.md) | May 2026 | 3.8B (+20B TE) | Turbo (distilled) | No | Dual-stream MMDiT from Microsoft with a GPT-OSS text encoder. Strong prompt adherence in 4 steps. |
