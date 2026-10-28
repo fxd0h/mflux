@@ -125,11 +125,18 @@ class TestIrisGenerateCli:
         turbo.touch()
         model, warned = run_cli("--model", "iris-3b-base", "--lora", str(style), "0.5")
         assert (model.kwargs["lora_paths"], model.kwargs["lora_scales"]) == ([str(style)], [0.5])
+        assert model.kwargs["bake_lora"] is False
         assert not any("--guidance" in w for w in warned)
 
+        assert model.generated[0]["num_inference_steps"] == 100
+
+        # A few-step LoRA runs its own step count, not the base model's default, unless --steps is given
         monkeypatch.setattr(_StubIris, "few_step", (4, 4.0))
-        _, warned = run_cli("--model", "iris-3b-base", "--lora", str(turbo), "--guidance", "3.0")
+        model, warned = run_cli("--model", "iris-3b-base", "--lora", str(turbo), "--guidance", "3.0")
         assert any(w.startswith("--guidance is ignored; a few-step LoRA") for w in warned)
+        assert model.generated[0]["num_inference_steps"] is None
+        model, _ = run_cli("--model", "iris-3b-base", "--lora", str(turbo), "--steps", "6")
+        assert model.generated[0]["num_inference_steps"] == 6
 
     def test_a_foreign_model_is_rejected(self, run_cli):
         with pytest.raises(Exception, match="only accepts the aliases"):
@@ -363,6 +370,7 @@ class TestIrisModel:
         model.callbacks.register(Recorder())
         model.prompt_cache = {"x": (mx.zeros((1,)), mx.zeros((1,)))}
         model.bits = None
+        model.few_step, model.lora_paths, model.lora_scales = None, None, None
 
         model.generate_image(seed=1, prompt="x", width=32, height=32)
 

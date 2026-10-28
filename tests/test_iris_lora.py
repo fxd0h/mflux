@@ -5,6 +5,7 @@ import mlx.core as mx
 import pytest
 from mlx import nn
 
+from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.iris.model.iris_scheduler.iris_few_step_scheduler import IrisFewStepScheduler
 from mflux.models.iris.model.iris_transformer.iris_transformer import IrisTransformer
@@ -140,3 +141,29 @@ class TestIrisFewStepScheduler:
         assert IrisFewStepScheduler.from_lora_files([str(style)]) is None
         assert IrisFewStepScheduler.from_lora_files([str(style), str(turbo)]) == (4, 4.0)
         assert IrisFewStepScheduler.from_lora_files(None) is None
+
+
+def test_the_initializer_records_the_loras_on_the_model(tmp_path, capsys):
+    # On the real nn.Module: MLX stores list attributes in the module's dict, which a class-level default breaks
+    from types import SimpleNamespace
+
+    from mflux.models.iris.iris_initializer import IrisInitializer
+    from mflux.models.iris.variants.txt2img.iris import Iris
+
+    turbo = tmp_path / "student.safetensors"
+    mx.save_safetensors(str(turbo), {"t_embedder.mlp.0.lora_down": mx.zeros((2, 256)), "t_embedder.mlp.0.lora_up": mx.zeros((128, 2))}, metadata={"extra": json.dumps({"turbo_steps": 4, "shift": 4.0})})  # fmt: off
+    model = Iris.__new__(Iris)
+    nn.Module.__init__(model)
+    model.transformer = _tiny_transformer()
+    model.model_config = ModelConfig.iris_3b_base()
+    IrisInitializer._apply_loras(model, SimpleNamespace(dense_component=lambda name: None), [str(turbo)], [1.0], True)  # noqa: ARG005
+    assert (model.lora_paths, model.lora_scales, model.few_step) == ([str(turbo)], [1.0], (4, 4.0))
+    assert "the base model runs 4 steps without CFG" in capsys.readouterr().out
+
+    plain = Iris.__new__(Iris)
+    nn.Module.__init__(plain)
+    plain.transformer = _tiny_transformer()
+    plain.model_config = ModelConfig.iris_3b_base()
+    IrisInitializer._apply_loras(plain, SimpleNamespace(dense_component=lambda name: None), None, None, True)  # noqa: ARG005
+    assert (plain.lora_paths, plain.few_step) == ([], None)
+    assert "Few-step LoRA" not in capsys.readouterr().out

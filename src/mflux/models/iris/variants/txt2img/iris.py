@@ -26,10 +26,9 @@ class Iris(nn.Module):
     DEFAULT_STEPS = 100
     DEFAULT_GUIDANCE = 3.0
     SHIFT = 4.0
-    # Set by the initializer from the loaded LoRAs; a model without LoRAs has none
-    lora_paths: list[str] | None = None
-    lora_scales: list[float] | None = None
-    few_step: tuple[int, float] | None = None
+    # A LoRA stays a separate layer by default: merged into the bfloat16 weights, a rank-64 few-step LoRA rounds enough
+    # to move the composition (22 dB from the unmerged image, against 30 dB for -q 8, which merges in float32)
+    DEFAULT_BAKE_LORA = False
 
     def __init__(
         self,
@@ -38,7 +37,7 @@ class Iris(nn.Module):
         model_config: ModelConfig | None = None,
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
-        bake_lora: bool = True,
+        bake_lora: bool = DEFAULT_BAKE_LORA,
     ):
         super().__init__()
         IrisInitializer.init(

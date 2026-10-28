@@ -21,7 +21,7 @@ class IrisInitializer:
         model_path: str | None = None,
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
-        bake_lora: bool = True,
+        bake_lora: bool = False,
     ) -> None:
         definition = IrisInitializer.weight_definition(model_config)
         saved_path = IrisInitializer.saved_path(model_config, model_path)
@@ -95,8 +95,11 @@ class IrisInitializer:
             bake_lora=bake_lora,
             dense_weights=weights.dense_component("transformer"),
         )
-        # A few-step LoRA distilled from the base model switches the base model to its sampler
+        # A few-step LoRA distilled from the base model switches the base model to its sampler, and says so
         model.few_step = IrisFewStepScheduler.from_lora_files(model.lora_paths)
+        if model.few_step is not None and model.model_config.supports_guidance:
+            steps, shift = model.few_step
+            print(f"⏩ Few-step LoRA (turbo_steps={steps}, shift={shift} in its metadata): the base model runs {steps} steps without CFG; --steps still applies, --guidance and --negative-prompt do not.")  # fmt: off
 
     @staticmethod
     def _apply_weights(model, weights: LoadedWeights, quantize: int | None, definition) -> None:

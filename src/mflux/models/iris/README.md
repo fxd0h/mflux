@@ -69,6 +69,23 @@ image.save("fox_base.png")
 ```
 </details>
 
+## LoRAs
+`--lora` loads Iris LoRAs with the names of the reference checkpoint: the kohya names the [reference repo](https://github.com/speridlabs/iris-3b) and its forks save (`blocks.0.q_proj.lora_down`), and the PEFT names under `diffusion_model.` that ai-toolkit saves. All 311 linear layers of the transformer can take a LoRA.
+
+A LoRA stays a separate layer by default. Merged into the bfloat16 weights (`--bake-lora`), the rank-64 LoRA below moved the composition of the image (22 dB from the unmerged one, against 30 dB with `-q 8`, which merges in float32 before it quantizes). Unmerged, a step took about 10% longer.
+
+Few-step LoRAs distilled from the base model, like [pentacoxian-dev/iris-3b-turbo-lora](https://huggingface.co/pentacoxian-dev/iris-3b-turbo-lora), record `turbo_steps` and `shift` in their metadata. With such a LoRA the base model runs that sampler, as the [reference fork](https://github.com/pentaCoxian/iris-3b-turbo) does: 4 steps from pure noise on the shifted grid, one pass per step without CFG, and fresh noise between steps. mflux prints a line when it switches. `--steps` still sets the count; `--guidance` and `--negative-prompt` have no effect, and mflux warns when they are given.
+
+```sh
+mflux-generate-iris \
+  --model iris-3b-base \
+  --lora pentacoxian-dev/iris-3b-turbo-lora:r2-1000/student.safetensors \
+  --prompt "a red fox sleeping in fresh snow, golden hour" \
+  --seed 42
+```
+
+On an M5 Max at 1024×1024 that takes about 1 second per step and 8 to 9 seconds for the whole run, loading included,, against 2.6 seconds per step for the base model with CFG.
+
 ## Quantization
 `-q 4` and `-q 8` quantize the model when it loads, the transformer and the text encoder. Small layers (the pixel-stage embedder, MLPs and head, the 12-to-1 layer pooling) and the feed-forward output projections, whose input width of 6826 is not a multiple of the quantization group size, stay in bf16. At `-q 4` and below the per-pixel adaLN projections of the pixel stage (2560 to 16384, they set individual pixel values) stay in bf16 too: quantized to 4 bits they print a faint screen-door grain over flat areas and fur. Measured on an M4 Pro (64 GB), Turbo, 1024×1024, seed 42. The transformer and the text encoder are both in memory while the weights load and the prompt is encoded; mflux then releases the text encoder, which is why the peak while generating is lower. The PSNR compares each image with the unquantized one: the composition is the same, the fine detail differs, and `-q 4` is visibly softer.
 

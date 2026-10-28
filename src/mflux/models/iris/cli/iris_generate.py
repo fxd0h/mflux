@@ -11,6 +11,9 @@ from mflux.utils.prompt_util import PromptUtil
 # The model this CLI runs when --model is omitted; the parser keys the --steps default (4) off it.
 DEFAULT_MODEL = "iris-3b"
 
+# LoRAs stay separate layers unless --bake-lora (see Iris.DEFAULT_BAKE_LORA)
+DEFAULT_BAKE_LORA = Iris.DEFAULT_BAKE_LORA
+
 # The other entries this CLI serves: the undistilled base model (100 steps, CFG 3.0).
 FAMILY_MODELS = tuple(key for key in AVAILABLE_MODELS if key.startswith("iris-") and key != DEFAULT_MODEL)
 
@@ -40,7 +43,7 @@ def build_parser() -> CommandLineParser:
     parser = CommandLineParser(description="Generate an image using Iris-3B.")
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False, default_model=DEFAULT_MODEL)
-    parser.add_lora_arguments()
+    parser.add_lora_arguments(bake_by_default=DEFAULT_BAKE_LORA)
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
     parser.add_output_arguments()
     return parser
@@ -73,6 +76,10 @@ def main():
         model_path=args.model_path,
         **lora_init_kwargs_from_args(args),
     )
+    # The parser fills --steps with the base model's 100; a few-step LoRA runs its own count unless --steps was given
+    steps = args.steps
+    if model.few_step is not None and not CommandLineParser._option_was_provided("--steps"):
+        steps = None
     if model.few_step is not None and model_config.supports_guidance:
         CommandLineParser.warn_ignored_options({
             "--guidance": "a few-step LoRA has its guidance distilled in and runs without CFG.",
@@ -92,7 +99,7 @@ def main():
                 prompt=PromptUtil.read_prompt(args),
                 width=width,
                 height=height,
-                num_inference_steps=args.steps,
+                num_inference_steps=steps,
                 guidance=args.guidance,
                 negative_prompt=args.negative_prompt,
             )
