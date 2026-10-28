@@ -777,6 +777,8 @@ class CommandLineParser(argparse.ArgumentParser):
                 getattr(namespace, "base_model", None),
                 fallback_model=self.default_model,
             )
+            # Neither the command line nor a metadata sidecar set it (Iris few-step LoRAs keep their own count then)
+            namespace.steps_is_default = True
 
         # In-context edit: exclusivity lives in the argparse group; only the
         # "at least one" half needs a post-parse check.

@@ -55,6 +55,10 @@ class Iris(nn.Module):
         return not self.model_config.supports_guidance
 
     def save_model(self, base_path: str) -> None:
+        if self.few_step is not None:
+            # The weights would keep the LoRA but the saved model has no record of its sampler, so it would run the
+            # base model's 100 steps with CFG
+            raise ValueError("A few-step LoRA changes the sampler, which a saved model cannot record. Save the model without it and pass --lora when you generate.")  # fmt: off
         ModelSaver.save_model(
             model=self,
             bits=self.bits,

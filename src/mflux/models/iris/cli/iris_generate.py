@@ -76,9 +76,10 @@ def main():
         model_path=args.model_path,
         **lora_init_kwargs_from_args(args),
     )
-    # The parser fills --steps with the base model's 100; a few-step LoRA runs its own count unless --steps was given
+    # The parser fills --steps with the base model's 100; a few-step LoRA runs its own count unless --steps or a
+    # metadata sidecar set one
     steps = args.steps
-    if model.few_step is not None and not CommandLineParser._option_was_provided("--steps"):
+    if model.few_step is not None and getattr(args, "steps_is_default", False):
         steps = None
     if model.few_step is not None and model_config.supports_guidance:
         CommandLineParser.warn_ignored_options({

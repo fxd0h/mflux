@@ -141,6 +141,15 @@ class TestIrisFewStepScheduler:
         assert IrisFewStepScheduler.from_lora_files([str(style)]) is None
         assert IrisFewStepScheduler.from_lora_files([str(style), str(turbo)]) == (4, 4.0)
         assert IrisFewStepScheduler.from_lora_files(None) is None
+        # At scale 0 the LoRA changes no weight, so it does not change the sampler
+        assert IrisFewStepScheduler.from_lora_files([str(turbo)], [0.0]) is None
+
+    @pytest.mark.parametrize("extra", [{"turbo_steps": 0}, {"turbo_steps": -2}, {"turbo_steps": 4, "shift": 0}, {"turbo_steps": 10**9}, {"turbo_steps": "four"}])  # fmt: off
+    def test_invalid_few_step_metadata_is_refused(self, tmp_path, extra):
+        path = tmp_path / "bad.safetensors"
+        mx.save_safetensors(str(path), {"a": mx.zeros((1,))}, metadata={"extra": json.dumps(extra)})
+        with pytest.raises(ValueError, match="needs 1 to 100 steps"):
+            IrisFewStepScheduler.from_lora_files([str(path)])
 
 
 def test_the_initializer_records_the_loras_on_the_model(tmp_path, capsys):
@@ -167,3 +176,14 @@ def test_the_initializer_records_the_loras_on_the_model(tmp_path, capsys):
     IrisInitializer._apply_loras(plain, SimpleNamespace(dense_component=lambda name: None), None, None, True)  # noqa: ARG005
     assert (plain.lora_paths, plain.few_step) == ([], None)
     assert "Few-step LoRA" not in capsys.readouterr().out
+
+
+def test_a_model_with_a_few_step_lora_cannot_be_saved(tmp_path):
+    # The saved weights would keep the LoRA, but nothing would record its sampler
+    from mflux.models.iris.variants.txt2img.iris import Iris
+
+    model = Iris.__new__(Iris)
+    nn.Module.__init__(model)
+    model.few_step = (4, 4.0)
+    with pytest.raises(ValueError, match="cannot record"):
+        model.save_model(str(tmp_path))

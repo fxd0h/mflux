@@ -74,7 +74,7 @@ image.save("fox_base.png")
 
 A LoRA stays a separate layer by default. Merged into the bfloat16 weights (`--bake-lora`), the rank-64 LoRA below moved the composition of the image (22 dB from the unmerged one, against 30 dB with `-q 8`, which merges in float32 before it quantizes). Unmerged, a step took about 10% longer.
 
-Few-step LoRAs distilled from the base model, like [pentacoxian-dev/iris-3b-turbo-lora](https://huggingface.co/pentacoxian-dev/iris-3b-turbo-lora), record `turbo_steps` and `shift` in their metadata. With such a LoRA the base model runs that sampler, as the [reference fork](https://github.com/pentaCoxian/iris-3b-turbo) does: 4 steps from pure noise on the shifted grid, one pass per step without CFG, and fresh noise between steps. mflux prints a line when it switches. `--steps` still sets the count; `--guidance` and `--negative-prompt` have no effect, and mflux warns when they are given.
+Few-step LoRAs distilled from the base model, like [pentacoxian-dev/iris-3b-turbo-lora](https://huggingface.co/pentacoxian-dev/iris-3b-turbo-lora), record `turbo_steps` and `shift` in their metadata. With such a LoRA the base model runs that sampler, as the [reference fork](https://github.com/pentaCoxian/iris-3b-turbo) does: 4 steps from pure noise on the shifted grid, one pass per step without CFG, and fresh noise between steps. mflux prints a line when it switches. A LoRA at scale 0 does not switch it, and `mflux-save` refuses a model with such a LoRA, since the saved model could not record the sampler. `--steps` still sets the count; `--guidance` and `--negative-prompt` have no effect, and mflux warns when they are given.
 
 ```sh
 mflux-generate-iris \

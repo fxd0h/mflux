@@ -137,6 +137,11 @@ class TestIrisGenerateCli:
         assert model.generated[0]["num_inference_steps"] is None
         model, _ = run_cli("--model", "iris-3b-base", "--lora", str(turbo), "--steps", "6")
         assert model.generated[0]["num_inference_steps"] == 6
+        # A replayed run keeps the step count its metadata sidecar recorded
+        sidecar = tmp_path / "run.json"
+        sidecar.write_text(json.dumps({"prompt": "a fox", "model": "iris-3b-base", "seed": 1, "steps": 6}))
+        model, _ = run_cli("--lora", str(turbo), "--config-from-metadata", str(sidecar))
+        assert model.generated[0]["num_inference_steps"] == 6
 
     def test_a_foreign_model_is_rejected(self, run_cli):
         with pytest.raises(Exception, match="only accepts the aliases"):
