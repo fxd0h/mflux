@@ -20,6 +20,8 @@ class _FakeAnima:
     def __init__(self, *, quantize, model_config, model_path=None, bake_lora=True):  # noqa: ARG002
         self.recorded = []
         self.last_generate_kwargs = None
+        self.vae = "vae"
+        self.tiling_config = None
 
         def transformer(latents, sigma, context):
             self.recorded.append(SimpleNamespace(latents=latents, sigma=sigma, context=context))
@@ -204,3 +206,23 @@ def test_gradient_checkpointing_keeps_the_lora_gradients():
     assert mx.allclose(plain_loss, ckpt_loss).item()
     for key in plain:
         assert mx.allclose(plain[key], ckpt[key], rtol=1e-4, atol=1e-6).item(), key
+
+
+@pytest.mark.fast
+def test_training_images_are_encoded_with_the_low_ram_tiling(monkeypatch, tmp_path):
+    # low_ram sets the model's tiling config; the encode of the training images must use it as the decode does
+    from mflux.models.common.vae.tiling_config import TilingConfig
+
+    monkeypatch.setattr(anima_adapter_module, "Anima", _FakeAnima)
+    adapter = AnimaTrainingAdapter(model_config=ModelConfig.anima_base(), quantize=None)
+    adapter._anima.tiling_config = TilingConfig()
+    seen = {}
+
+    def encode_image(**kwargs):
+        seen.update(kwargs)
+        raise StopIteration
+
+    monkeypatch.setattr(anima_adapter_module.LatentCreator, "encode_image", staticmethod(encode_image))
+    with pytest.raises(StopIteration):
+        adapter.encode_data(data_id=0, image_path=tmp_path / "x.png", prompt="a fox", width=64, height=64)
+    assert seen["tiling_config"] is adapter._anima.tiling_config

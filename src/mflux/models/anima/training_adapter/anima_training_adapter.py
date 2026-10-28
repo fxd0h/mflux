@@ -72,7 +72,14 @@ class AnimaTrainingAdapter(TrainingAdapter):
         height: int,
         input_image_path: Path | None = None,
     ) -> tuple[mx.array, Any]:
-        encoded = LatentCreator.encode_image(vae=self._anima.vae, image_path=image_path, height=height, width=width)
+        # low_ram sets a tiling config on the model, which the encode of a large image needs as much as the decode
+        encoded = LatentCreator.encode_image(
+            vae=self._anima.vae,
+            image_path=image_path,
+            height=height,
+            width=width,
+            tiling_config=self._anima.tiling_config,
+        )
         clean_latents = AnimaLatentCreator.pack_latents(encoded, height, width)
         # Captions are literal text, as ai-toolkit reads them: "hatsune miku (vocaloid)" is a Danbooru tag, not a weight
         context = AnimaPromptEncoder.encode(
