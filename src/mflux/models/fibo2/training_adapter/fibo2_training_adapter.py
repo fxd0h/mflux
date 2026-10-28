@@ -143,6 +143,7 @@ class Fibo2TrainingAdapter(TrainingAdapter):
             lora = TrainingUtil.get_train_lora(self._fibo2.transformer, module_path)
             loras[module_path] = (mx.transpose(lora.lora_A), mx.transpose(lora.lora_B), float(lora.scale))
         ranks = {module_path: int(down.shape[0]) for module_path, (down, _, _) in loras.items()}
+        scales = {module_path: scale for module_path, (_, _, scale) in loras.items()}
         mx.save_safetensors(
             str(path),
             Fibo2ComfyLoRA.weights(loras),
@@ -151,12 +152,13 @@ class Fibo2TrainingAdapter(TrainingAdapter):
                 "mflux_version": VersionUtil.get_mflux_version(),
                 "model": training_spec.model,
                 Fibo2ComfyLoRA.RANKS_KEY: json.dumps(ranks),
+                Fibo2ComfyLoRA.SCALES_KEY: json.dumps(scales),
             },
         )
 
     def load_lora_adapter(self, *, path: str | Path) -> None:
         # Resuming: a fused layer loaded as is would give every part the whole stacked down weight, so a run's own
-        # checkpoint is split back into its modules at their ranks, which the saved optimizer state matches
+        # checkpoint is split back into its modules at their ranks and scales, which the saved optimizer state matches
         weights, metadata = mx.load(str(path), return_metadata=True)
         ranks = metadata.get(Fibo2ComfyLoRA.RANKS_KEY)
         if ranks is None:
@@ -164,7 +166,9 @@ class Fibo2TrainingAdapter(TrainingAdapter):
             return
         with tempfile.TemporaryDirectory() as temp_dir:
             split_path = Path(temp_dir) / "adapter.safetensors"
-            mx.save_safetensors(str(split_path), Fibo2ComfyLoRA.split(weights, json.loads(ranks)))
+            scales = metadata.get(Fibo2ComfyLoRA.SCALES_KEY)
+            split = Fibo2ComfyLoRA.split(weights, json.loads(ranks), json.loads(scales) if scales else None)
+            mx.save_safetensors(str(split_path), split)
             self._load_train_lora(split_path)
 
     def _load_train_lora(self, path: str | Path) -> None:

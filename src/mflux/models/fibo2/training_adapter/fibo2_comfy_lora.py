@@ -10,8 +10,10 @@ class Fibo2ComfyLoRA:
     # stacked exactly: their down weights one above the other and their up weights block-diagonal, so each part keeps
     # its own delta and the fused rank is the sum. Each part's alpha / rank is folded into its up weight.
     PADDED_FFN = 9728
-    # Metadata key with each trained module's rank, so a resumed run splits the fused layers back exactly
+    # Metadata keys with each trained module's rank and scale (alpha / rank), so a resumed run splits the fused layers
+    # back exactly and each module trains on at its own scale
     RANKS_KEY = "mflux_lora_ranks"
+    SCALES_KEY = "mflux_lora_scales"
 
     @staticmethod
     def weights(loras: dict[str, tuple[mx.array, mx.array, float]]) -> dict[str, mx.array]:
@@ -69,9 +71,12 @@ class Fibo2ComfyLoRA:
         return down, up
 
     @staticmethod
-    def split(weights: dict[str, mx.array], ranks: dict[str, int]) -> dict[str, mx.array]:
+    def split(
+        weights: dict[str, mx.array], ranks: dict[str, int], scales: dict[str, float] | None = None
+    ) -> dict[str, mx.array]:
         # The inverse of weights() for a run's own checkpoint: each module gets back its own down and up weights at its
-        # own rank (alpha / rank stays folded into up), under the names Fibo2LoRAMapping reads as unfused layers
+        # own rank, under the names Fibo2LoRAMapping reads as unfused layers. With the scales, alpha / rank comes out
+        # of up again and is written as .alpha; without them (an older checkpoint) it stays folded into up
         groups: dict[str, list[tuple[int, int, str, int]]] = {}
         for path, rank in ranks.items():
             name, index, count = Fibo2ComfyLoRA._comfy_name(path)
@@ -89,7 +94,11 @@ class Fibo2ComfyLoRA:
                 if name.endswith(("feed_forward.w2", "ffn.w2")) and part_down.shape[1] == Fibo2ComfyLoRA.PADDED_FFN:
                     part_down = part_down[:, : Fibo2LoRAMapping.FFN_HIDDEN]
                 source = f"transformer.{Fibo2LoRAMapping.diffusers_name(path)}"
+                part_up = up[index * block : index * block + rows, column : column + rank]
                 out[f"{source}.lora_A.weight"] = part_down
-                out[f"{source}.lora_B.weight"] = up[index * block : index * block + rows, column : column + rank]
+                if scales is not None and path in scales:
+                    part_up = part_up / scales[path]
+                    out[f"{source}.alpha"] = mx.array(scales[path] * rank)
+                out[f"{source}.lora_B.weight"] = part_up
                 column += rank
         return out

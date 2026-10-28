@@ -226,9 +226,10 @@ def test_the_saved_lora_has_comfyui_keys_and_loads_back_at_its_strength(monkeypa
     assert mx.allclose(_Fake.output(reloaded.transformer()), expected, rtol=1e-5, atol=1e-4).item()
 
 
-def test_a_resumed_run_gets_each_module_back_at_its_own_rank(monkeypatch, tmp_path):
+def test_a_resumed_run_gets_each_module_back_at_its_own_rank_and_scale(monkeypatch, tmp_path):
     # The saved optimizer state has one entry per trained module at its rank: resuming from the fused ComfyUI file must
-    # give q, k, v, w1 and w3 their own down and up weights again, not the stacked ones
+    # give q, k, v, w1 and w3 their own down and up weights again, not the stacked ones, and alpha / rank back as the
+    # layer's scale rather than folded into up, which would change the weights the optimizer state belongs to
     from mflux.models.common.training.lora.path_util import expand_module_paths_from_targets
     from mflux.models.common.training.utils import TrainingUtil
 
@@ -246,7 +247,8 @@ def test_a_resumed_run_gets_each_module_back_at_its_own_rank(monkeypatch, tmp_pa
         loaded = TrainingUtil.get_train_lora(resumed.transformer(), module_path)
         assert loaded.lora_A.shape == trained.lora_A.shape, module_path
         assert mx.allclose(loaded.lora_A, trained.lora_A).item(), module_path
-        assert mx.allclose(loaded.lora_B, trained.lora_B * trained.scale, atol=1e-6).item(), module_path
+        assert loaded.scale == pytest.approx(trained.scale) and trained.scale != 1.0, module_path
+        assert mx.allclose(loaded.lora_B, trained.lora_B, atol=1e-6).item(), module_path
 
 
 def test_the_feed_forward_is_padded_like_the_comfyui_repack():

@@ -58,6 +58,7 @@ class Fibo2LoRAMapping:
         # The name diffusers, PEFT and ComfyUI give the module at this MLX path, which a saved LoRA's keys use
         return Fibo2LoRAMapping.DIFFUSERS_NAMES.get(model_path, model_path)
 
+    @staticmethod
     def _norm_targets() -> list[LoRATarget]:
         # Extracted LoRAs (kohya, like Comfy-Org's turbo LoRA) also patch the norm weights directly (.diff). ComfyUI
         # names the self-attention q and k norms q_norm and k_norm; the other norms have the same names.
