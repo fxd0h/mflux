@@ -153,3 +153,20 @@ class TestTimestepOptions:
             runner_module.TrainingRunner._check_timestep_options(_ContinuousAdapter(), spec)
         # A grid adapter takes them
         runner_module.TrainingRunner._check_timestep_options(_GridAdapter(), spec)
+
+
+@pytest.mark.parametrize("alpha", [0, -4])
+def test_a_target_alpha_must_be_positive(tmp_path, alpha):
+    from mflux.models.common.training.state.training_spec import TrainingSpec
+
+    (tmp_path / "01.txt").write_text("a fox", encoding="utf-8")
+    (tmp_path / "01.jpeg").write_bytes(b"")
+    conf = {
+        "model": "dev", "seed": 42, "steps": 20, "data": str(tmp_path),
+        "training_loop": {"num_epochs": 1, "batch_size": 1},
+        "optimizer": {"name": "AdamW", "learning_rate": 1e-4},
+        "checkpoint": {"output_path": str(tmp_path / "out"), "save_frequency": 10},
+        "lora_layers": {"targets": [{"module_path": "proj", "rank": 4, "alpha": alpha}]},
+    }  # fmt: off
+    with pytest.raises(ValueError, match="'alpha' must be > 0"):
+        TrainingSpec.from_conf(conf, str(tmp_path / "train.json"), new_folder=False)
