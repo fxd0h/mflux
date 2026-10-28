@@ -134,7 +134,7 @@ class TestIrisGenerateCli:
         assert status["--steps"] == status["--guidance"] == status["--negative-prompt"] == "conditional"
         assert status["--scheduler"] == status["--vae-tiling"] == status["--vae-tile-size"] == "ignored"
         assert "--compute-precision" not in status
-        assert "--lora" not in status
+        assert status["--lora"] == status["--bake-lora"] == "honored"
 
 
 @pytest.mark.fast

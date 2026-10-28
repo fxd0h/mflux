@@ -1,0 +1,142 @@
+import json
+import re
+
+import mlx.core as mx
+import pytest
+from mlx import nn
+
+from mflux.models.common.lora.mapping.lora_loader import LoRALoader
+from mflux.models.iris.model.iris_scheduler.iris_few_step_scheduler import IrisFewStepScheduler
+from mflux.models.iris.model.iris_transformer.iris_transformer import IrisTransformer
+from mflux.models.iris.weights.iris_lora_mapping import IrisLoRAMapping
+
+pytestmark = pytest.mark.fast
+
+
+def _tiny_transformer() -> IrisTransformer:
+    # depth 3 with one dual-stream block, so both block kinds are there
+    return IrisTransformer(
+        hidden_size=128, depth=3, dual_depth=1, num_heads=2, num_kv_heads=1, patch_size=4, in_channels=3, text_len=16,
+        text_dim=128, text_num_layers=3, text_layer_num_heads=2, pixel_depth=2, pixel_hidden_size=16,
+        pixel_attn_hidden_size=128, pixel_num_heads=2,
+    )  # fmt: off
+
+
+def _reference_name(path: str) -> str:
+    # The reference checkpoint's name for an MLX module path
+    for mlx_name, reference in IrisLoRAMapping.REFERENCE_NAMES.items():
+        pattern = re.escape(mlx_name).replace(re.escape("{block}"), r"(\d+)")
+        match = re.fullmatch(pattern, path)
+        if match:
+            return reference.format(block=match.group(1)) if match.groups() else reference
+    return path
+
+
+def _linear_paths(transformer: nn.Module) -> list[str]:
+    return [name for name, module in transformer.named_modules() if isinstance(module, nn.Linear)]
+
+
+def _forward(transformer: IrisTransformer) -> mx.array:
+    x = mx.random.normal((1, 3, 16, 16), key=mx.random.key(0))
+    text = mx.random.normal((1, 16, 3, 128), key=mx.random.key(1))
+    return transformer(x, mx.array([500.0]), text, mx.ones((1, 16)))
+
+
+def test_every_linear_layer_has_a_target():
+    # The full model's 311 linear layers, under the names its checkpoint uses
+    paths = _linear_paths(IrisTransformer())
+    assert len(paths) == 311
+    keys = [f"{_reference_name(path)}.lora_down" for path in paths]
+    reached = {
+        target.model_path.format(block=block)
+        for key in keys
+        for target in IrisLoRAMapping.get_mapping()
+        for pattern in target.possible_down_patterns
+        if (block := LoRALoader._match_pattern(key, pattern)) is not None
+    }
+    assert reached == set(paths)
+
+
+@pytest.mark.parametrize(
+    ("down", "up"),
+    [("{}.lora_down", "{}.lora_up"), ("diffusion_model.{}.lora_A.weight", "diffusion_model.{}.lora_B.weight")],
+    ids=["reference-kohya", "ai-toolkit"],
+)
+def test_a_lora_gives_every_layer_its_delta(tmp_path, down, up):
+    # The reference repo's names with bare kohya matrices (as pentacoxian-dev/iris-3b-turbo-lora saves), and
+    # ai-toolkit's PEFT names under diffusion_model., on every linear layer of a tiny model
+    transformer = _tiny_transformer()
+    paths = _linear_paths(transformer)
+    rank = 2
+    weights, deltas = {}, {}
+    for i, path in enumerate(paths):
+        linear = dict(transformer.named_modules())[path]
+        out_dim, in_dim = linear.weight.shape
+        a = mx.random.normal((rank, in_dim), key=mx.random.key(2 * i)) * 0.01
+        b = mx.random.normal((out_dim, rank), key=mx.random.key(2 * i + 1)) * 0.01
+        name = _reference_name(path)
+        weights[down.format(name)], weights[up.format(name)] = a, b
+        deltas[path] = (b @ a, linear.weight)
+    file = tmp_path / "iris_lora.safetensors"
+    mx.save_safetensors(str(file), weights)
+
+    LoRALoader.load_and_apply_lora(IrisLoRAMapping.get_mapping(), transformer, [str(file)], [1.0], bake_lora=True)
+
+    modules = dict(transformer.named_modules())
+    for path, (delta, before) in deltas.items():
+        assert mx.allclose(modules[path].weight - before, delta, atol=1e-5).item(), path
+
+
+def test_a_runtime_lora_matches_the_baked_one(tmp_path):
+    rank, weights = 2, {}
+    for i, path in enumerate(["blocks.0.attn.q_proj_x", "blocks.2.mlp.w2", "t_embedder.linear_1", "pixel_blocks.1.mlp.fc1"]):  # fmt: off
+        linear = dict(_tiny_transformer().named_modules())[path]
+        out_dim, in_dim = linear.weight.shape
+        weights[f"{_reference_name(path)}.lora_down"] = mx.random.normal((rank, in_dim), key=mx.random.key(i)) * 0.1
+        weights[f"{_reference_name(path)}.lora_up"] = mx.random.normal((out_dim, rank), key=mx.random.key(9 + i)) * 0.1
+    file = tmp_path / "iris_lora.safetensors"
+    mx.save_safetensors(str(file), weights)
+    outputs = []
+    for bake in (True, False):
+        mx.random.seed(0)
+        transformer = _tiny_transformer()
+        LoRALoader.load_and_apply_lora(IrisLoRAMapping.get_mapping(), transformer, [str(file)], [0.7], bake_lora=bake)
+        outputs.append(_forward(transformer))
+    mx.random.seed(0)
+    plain = _forward(_tiny_transformer())
+    # Baking rounds the merged weight (about 1e-3 here); the LoRA itself moves the output by about 0.1
+    assert mx.allclose(outputs[0], outputs[1], atol=5e-3).item()
+    assert not mx.allclose(outputs[0], plain, atol=5e-2).item()
+
+
+class TestIrisFewStepScheduler:
+    def test_the_times_are_the_reference_turbo_times(self):
+        # pentaCoxian/iris-3b-turbo turbo_times(4, 4.0): an even grid from 1, shifted
+        assert IrisFewStepScheduler(4, 4.0, seed=0).sigmas == pytest.approx([1.0, 12 / 13, 0.8, 4 / 7])
+
+    def test_each_step_renoises_the_clean_estimate(self):
+        noise = mx.random.normal((1, 3, 4, 4), key=mx.random.key(0))
+        clean = mx.random.normal((1, 3, 4, 4), key=mx.random.key(1))
+        scheduler = IrisFewStepScheduler(4, 4.0, seed=3)
+        latents = noise
+        for step in range(4):
+            sigma = scheduler.sigmas[step]
+            latents, estimate = scheduler.step(latents, (latents - clean) / sigma, step)
+            assert mx.allclose(estimate, clean, atol=1e-5).item()
+        assert mx.allclose(latents, clean, atol=1e-5).item()
+
+    def test_the_noise_follows_the_seed(self):
+        latents, velocity = mx.zeros((1, 3, 4, 4)), mx.zeros((1, 3, 4, 4))
+        first = IrisFewStepScheduler(4, 4.0, seed=5).step(latents, velocity, 0)[0]
+        again = IrisFewStepScheduler(4, 4.0, seed=5).step(latents, velocity, 0)[0]
+        other = IrisFewStepScheduler(4, 4.0, seed=6).step(latents, velocity, 0)[0]
+        assert mx.array_equal(first, again).item() and not mx.array_equal(first, other).item()
+
+    def test_a_few_step_lora_is_found_from_its_metadata(self, tmp_path):
+        turbo = tmp_path / "student.safetensors"
+        mx.save_safetensors(str(turbo), {"a": mx.zeros((1,))}, metadata={"rank": "64", "extra": json.dumps({"turbo_steps": 4, "shift": 4.0})})  # fmt: off
+        style = tmp_path / "style.safetensors"
+        mx.save_safetensors(str(style), {"a": mx.zeros((1,))}, metadata={"format": "pt"})
+        assert IrisFewStepScheduler.from_lora_files([str(style)]) is None
+        assert IrisFewStepScheduler.from_lora_files([str(style), str(turbo)]) == (4, 4.0)
+        assert IrisFewStepScheduler.from_lora_files(None) is None

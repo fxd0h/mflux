@@ -9,6 +9,7 @@ from mflux.models.common.weights.saving.model_saver import ModelSaver
 from mflux.models.flux2.model.flux2_text_encoder.qwen3_text_encoder import Qwen3TextEncoder
 from mflux.models.iris.iris_initializer import IrisInitializer
 from mflux.models.iris.latent_creator.iris_latent_creator import IrisLatentCreator
+from mflux.models.iris.model.iris_scheduler.iris_few_step_scheduler import IrisFewStepScheduler
 from mflux.models.iris.model.iris_scheduler.iris_flow_dpm_solver import IrisFlowDPMSolver
 from mflux.models.iris.model.iris_scheduler.iris_turbo_scheduler import IrisTurboScheduler
 from mflux.models.iris.model.iris_text_encoder.prompt_encoder import IrisPromptEncoder
@@ -25,12 +26,19 @@ class Iris(nn.Module):
     DEFAULT_STEPS = 100
     DEFAULT_GUIDANCE = 3.0
     SHIFT = 4.0
+    # Set by the initializer from the loaded LoRAs; a model without LoRAs has none
+    lora_paths: list[str] | None = None
+    lora_scales: list[float] | None = None
+    few_step: tuple[int, float] | None = None
 
     def __init__(
         self,
         quantize: int | None = None,
         model_path: str | None = None,
         model_config: ModelConfig | None = None,
+        lora_paths: list[str] | None = None,
+        lora_scales: list[float] | None = None,
+        bake_lora: bool = True,
     ):
         super().__init__()
         IrisInitializer.init(
@@ -38,6 +46,9 @@ class Iris(nn.Module):
             model_config=model_config or ModelConfig.iris_3b(),
             quantize=quantize,
             model_path=model_path,
+            lora_paths=lora_paths,
+            lora_scales=lora_scales,
+            bake_lora=bake_lora,
         )
 
     @property
@@ -66,6 +77,9 @@ class Iris(nn.Module):
         # Turbo has a fixed 4-step schedule with distilled guidance; steps, guidance and negative prompt are for Base.
         if self.is_turbo:
             num_inference_steps, guidance, negative_prompt = IrisTurboScheduler().num_inference_steps, None, None
+        elif self.few_step is not None:
+            # A few-step LoRA on the base model has its guidance distilled in: its own step count, no CFG
+            num_inference_steps, guidance, negative_prompt = num_inference_steps or self.few_step[0], None, None
         else:
             num_inference_steps = num_inference_steps or Iris.DEFAULT_STEPS
             guidance = Iris.DEFAULT_GUIDANCE if guidance is None else float(guidance)
@@ -80,14 +94,14 @@ class Iris(nn.Module):
 
         # 1. Encode the prompt (and the null prompt for CFG)
         cond, cond_mask = self._encode_prompt(prompt)
-        use_cfg = not self.is_turbo and guidance != 1.0
+        use_cfg = guidance is not None and guidance != 1.0
         uncond, uncond_mask = self._encode_prompt(negative_prompt) if use_cfg else (None, None)
 
         # 2. Noise
         latents = IrisLatentCreator.create_noise(seed, config.height, config.width)
 
         # 3. Denoising loop; the integrator state stays float32, the network runs in the model precision.
-        scheduler = IrisTurboScheduler() if self.is_turbo else IrisFlowDPMSolver(num_inference_steps, Iris.SHIFT)
+        scheduler = self._scheduler(num_inference_steps, seed)
         ctx = self.callbacks.start(seed=seed, prompt=prompt, config=config)
         ctx.before_loop(latents)
         clean = latents
@@ -99,7 +113,7 @@ class Iris(nn.Module):
                     )
                 else:
                     output = self._predict(latents, scheduler.model_time(t), cond, cond_mask)
-                if self.is_turbo:
+                if self.is_turbo or self.few_step is not None:
                     latents, clean = scheduler.step(latents, output, t)
                 else:
                     latents = clean = scheduler.step(latents, output, t)
@@ -123,9 +137,18 @@ class Iris(nn.Module):
             seed=seed,
             prompt=prompt,
             quantization=self.bits,
+            lora_paths=self.lora_paths,
+            lora_scales=self.lora_scales,
             negative_prompt=negative_prompt,
             generation_time=config.time_steps.format_dict["elapsed"],
         )
+
+    def _scheduler(self, num_inference_steps: int, seed: int):
+        if self.is_turbo:
+            return IrisTurboScheduler()
+        if self.few_step is not None:
+            return IrisFewStepScheduler(num_inference_steps, self.few_step[1], seed)
+        return IrisFlowDPMSolver(num_inference_steps, Iris.SHIFT)
 
     def _metadata_model_config(self) -> ModelConfig:
         # Turbo and base share one repo id, which is all a metadata sidecar records as the model. Naming the base

@@ -202,6 +202,7 @@ class TestIrisWeightSources:
         )
         monkeypatch.setattr(IrisInitializer, "_init_models", staticmethod(lambda m: None))
         monkeypatch.setattr(IrisInitializer, "_apply_weights", staticmethod(lambda *a: None))
+        monkeypatch.setattr(IrisInitializer, "_apply_loras", staticmethod(lambda *a: None))
 
         IrisInitializer.init(
             model=type("M", (), {})(),

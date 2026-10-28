@@ -1,5 +1,5 @@
 from mflux.callbacks.callback_manager import CallbackManager
-from mflux.cli.parser.parsers import CommandLineParser
+from mflux.cli.parser.parsers import CommandLineParser, lora_init_kwargs_from_args
 from mflux.models.common.config.model_config import AVAILABLE_MODELS
 from mflux.models.common.resolution.config_resolution import ConfigResolution
 from mflux.models.iris.latent_creator.iris_latent_creator import IrisLatentCreator
@@ -40,6 +40,7 @@ def build_parser() -> CommandLineParser:
     parser = CommandLineParser(description="Generate an image using Iris-3B.")
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False, default_model=DEFAULT_MODEL)
+    parser.add_lora_arguments()
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
     parser.add_output_arguments()
     return parser
@@ -70,6 +71,7 @@ def main():
         model_config=model_config,
         quantize=args.quantize,
         model_path=args.model_path,
+        **lora_init_kwargs_from_args(args),
     )
 
     memory_saver = CallbackManager.register_callbacks(
