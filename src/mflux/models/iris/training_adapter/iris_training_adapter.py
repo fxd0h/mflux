@@ -23,7 +23,7 @@ class IrisTrainingAdapter(TrainingAdapter):
     # Iris generates in pixel space, so the trainer's "latents" are the image itself in [-1, 1], (1, 3, H, W). The
     # transformer takes 1000 * sigma and returns the velocity noise - clean, the target of the trainer's loss. LoRAs
     # train on the base model (Turbo is distilled) and are saved with the reference checkpoint's names under
-    # diffusion_model., the keys ai-toolkit writes, so mflux and ai-toolkit both read them.
+    # diffusion_model., the keys and shapes ai-toolkit writes for Iris.
     SCHEDULE = f"{IrisTrainingSchedule.__module__}.{IrisTrainingSchedule.__name__}"
 
     def __init__(self, *, model_config: ModelConfig, quantize: int | None, model_path: str | None = None):
