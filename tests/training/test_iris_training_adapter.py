@@ -11,6 +11,7 @@ from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.training.lora.target_injector import inject_lora_targets
 from mflux.models.common.training.state.training_spec import BlockRange, LoraLayersSpec, LoraTargetSpec
 from mflux.models.common.training.trainer import TrainingTrainer
+from mflux.models.common.training.utils import TrainingUtil
 from mflux.models.iris.model.iris_scheduler.iris_training_schedule import IrisTrainingSchedule
 from mflux.models.iris.model.iris_transformer.iris_transformer import IrisTransformer
 from mflux.models.iris.training_adapter import iris_training_adapter as adapter_module
@@ -53,7 +54,7 @@ def _adapter(monkeypatch) -> IrisTrainingAdapter:
 def _inputs():
     image = mx.random.normal((1, 3, 16, 16), key=mx.random.key(0))
     text = mx.random.normal((1, 16, 3, 128), key=mx.random.key(1))
-    return image, (text, mx.ones((1, 16)))
+    return image, {"embeddings": text, "mask": mx.ones((1, 16))}
 
 
 TARGETS = [
@@ -92,7 +93,7 @@ def test_predict_noise_feeds_one_thousand_times_sigma_and_returns_the_velocity(m
     image, cond = _inputs()
     sigmas = mx.array([1.0, 0.75, 0.0])
     out = adapter.predict_noise(t=1, latents_t=image, sigmas=sigmas, cond=cond, config=None)
-    assert seen["t"].tolist() == [750.0] and seen["y"] is cond[0] and seen["mask"] is cond[1]
+    assert seen["t"].tolist() == [750.0] and seen["y"] is cond["embeddings"] and seen["mask"] is cond["mask"]
     assert out.dtype == image.dtype and mx.allclose(out, image * 2, rtol=1e-2, atol=1e-2).item()
 
 
@@ -123,13 +124,14 @@ def test_encode_data_gives_the_image_in_minus_one_to_one_and_the_caption_encodin
     clean, cond = adapter.encode_data(data_id=0, image_path=path, prompt="a fox", width=32, height=16)
     assert clean.shape == (1, 3, 16, 32) and clean.dtype == mx.float32
     assert mx.allclose(clean, mx.ones_like(clean)).item()
-    assert cond is encoded or cond == encoded
+    assert cond["embeddings"] is encoded[0] and cond["mask"] is encoded[1]
 
 
 def test_a_saved_lora_has_reference_keys_and_loads_back_at_its_strength(monkeypatch, tmp_path):
     adapter = _adapter(monkeypatch)
     _with_lora(adapter.transformer())
-    image, (text, mask) = _inputs()
+    image, cond = _inputs()
+    text, mask = cond["embeddings"], cond["mask"]
     expected = adapter.transformer()(image, mx.array([500.0]), text, mask)
     path = tmp_path / "adapter.safetensors"
     adapter.save_lora_adapter(path=path, training_spec=SimpleNamespace(lora_layers=LoraLayersSpec(targets=TARGETS), model="iris-3b-base"))  # fmt: off
@@ -147,7 +149,8 @@ def test_a_saved_lora_has_reference_keys_and_loads_back_at_its_strength(monkeypa
 
 
 def test_gradient_checkpointing_keeps_the_loss_and_lora_gradients():
-    image, (text, mask) = _inputs()
+    image, cond = _inputs()
+    text, mask = cond["embeddings"], cond["mask"]
     transformer = _with_lora(_tiny_transformer())
     transformer.freeze()
     transformer.unfreeze(keys=["lora_A", "lora_B"], strict=False)
@@ -173,3 +176,55 @@ def test_reference_names_cover_the_renamed_modules():
     assert IrisLoRAMapping.reference_name("t_embedder.linear_2") == "t_embedder.mlp.2"
     assert IrisLoRAMapping.reference_name("y_embedder.layer_blocks.1.mlp.fc1") == "y_embedder.layer_blocks.1.mlp.0"
     assert IrisLoRAMapping.reference_name("blocks.3.q_proj") == "blocks.3.q_proj"
+
+
+def test_each_item_trains_on_the_shift_of_its_own_size(monkeypatch):
+    # The preview is 1024 (shift 4) and the item 512 (shift 3): the item must not reuse the preview's schedule
+    import random
+
+    from mflux.models.common.training.dataset.batch import DataItem
+
+    adapter = _adapter(monkeypatch)
+    spec = SimpleNamespace(steps=4, guidance=None, training_loop=SimpleNamespace(timestep_low=0, timestep_high=None, timestep_type=None))  # fmt: off
+    base_config = adapter.create_config(spec, width=1024, height=1024)
+    _ = base_config.scheduler
+    seen = {}
+
+    def predict_noise(*, t, latents_t, sigmas, cond, config):  # noqa: ARG001
+        seen["sigmas"] = sigmas
+        return mx.zeros_like(latents_t)
+
+    adapter.predict_noise = predict_noise
+    item = DataItem(data_id=0, prompt="a fox", image_path="x.png", clean_latents=mx.zeros((1, 3, 512, 512)), cond={}, width=512, height=512)  # fmt: off
+    TrainingTrainer._single_example_loss(adapter, spec, base_config, item, random.Random(0))
+    assert seen["sigmas"].tolist() == pytest.approx([1.0, 0.9, 0.75, 0.5, 0.0])
+
+
+def test_the_conditioning_goes_through_the_low_ram_data_cache(monkeypatch, tmp_path):
+    from mflux.models.common.training.dataset.data_cache import TrainingDataCache
+
+    adapter = _adapter(monkeypatch)
+    image, cond = _inputs()
+    paths = TrainingDataCache.wipe_and_init(data_root=tmp_path)
+    TrainingDataCache.save_item(paths=paths, data_id=0, prompt="a fox", image_path=tmp_path / "x.png", width=16, height=16, clean_latents=image, cond=cond)  # fmt: off
+    clean, loaded, _, _ = TrainingDataCache.load_tensors(paths=paths, data_id=0)
+    adapter._iris.transformer = _tiny_transformer()
+    sigmas = mx.array([1.0, 0.5, 0.0])
+    expected = adapter.predict_noise(t=1, latents_t=image, sigmas=sigmas, cond=cond, config=None)
+    assert mx.allclose(adapter.predict_noise(t=1, latents_t=clean, sigmas=sigmas, cond=loaded, config=None), expected).item()
+
+
+def test_a_resumed_lora_trains_at_its_saved_scale(monkeypatch, tmp_path):
+    # alpha 8 at rank 4 trains at scale 2. Resuming must give the layer that scale and B back as it was, so the
+    # restored optimizer state still matches the weights it moves
+    adapter = _adapter(monkeypatch)
+    _with_lora(adapter.transformer())
+    trained = TrainingUtil.get_train_lora(adapter.transformer(), "t_embedder.linear_1")
+    path = tmp_path / "adapter.safetensors"
+    adapter.save_lora_adapter(path=path, training_spec=SimpleNamespace(lora_layers=LoraLayersSpec(targets=TARGETS), model="iris-3b-base"))  # fmt: off
+
+    resumed = _adapter(monkeypatch)
+    resumed.load_lora_adapter(path=path)
+    loaded = TrainingUtil.get_train_lora(resumed.transformer(), "t_embedder.linear_1")
+    assert trained.scale == loaded.scale == pytest.approx(2.0)
+    assert mx.array_equal(loaded.lora_B, trained.lora_B).item() and mx.array_equal(loaded.lora_A, trained.lora_A).item()

@@ -76,12 +76,13 @@ class IrisTrainingAdapter(TrainingAdapter):
             prompt=prompt, tokenizer=self._iris.tokenizers["qwen3_vl"], text_encoder=self._iris.text_encoder
         )
         mx.eval(clean, embeddings, mask)
-        return clean, (embeddings, mask)
+        # A dict of arrays, the form the low_ram data cache stores
+        return clean, {"embeddings": embeddings, "mask": mask}
 
     def predict_noise(self, *, t: int, latents_t: mx.array, sigmas: mx.array, cond: Any, config: Config) -> mx.array:  # noqa: ARG002
-        embeddings, mask = cond
         model_time = mx.reshape(sigmas[t], (1,)) * IrisTrainingSchedule.NUM_TRAIN_TIMESTEPS
-        return self._iris.transformer(latents_t, model_time, embeddings, mask).astype(latents_t.dtype)
+        output = self._iris.transformer(latents_t, model_time, cond["embeddings"], cond["mask"])
+        return output.astype(latents_t.dtype)
 
     def generate_preview_image(
         self,
