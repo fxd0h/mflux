@@ -151,6 +151,8 @@ Against ai-toolkit on an M5 Max, with the same 12 images and the config above (3
 
 The style score is the share of pixels in the dataset's blueprint blue on 3 prompts outside the training images, each LoRA generated in mflux. Runs at the same time of day took 10 to 17% less time per step in mflux. ¹ Run 1 repeated with the text encoder released, same score; the three runs kept it and peaked at 18.8 GB. ² With the text encoder kept. `"quantize": 8` trains over a quantized base: a short run with previews on peaked at about 13 GB.
 
+For speed over memory, set `"gradient_checkpointing": false`: a step took 0.78 s instead of 1.05 s, and the peak went from 10.7 to 21 GB. Releasing the text encoder costs no time, since training never runs it again once the captions are encoded.
+
 ## Quantization
 `-q 4` and `-q 8` quantize the model when it loads, the transformer and the text encoder. Small layers (the pixel-stage embedder, MLPs and head, the 12-to-1 layer pooling) and the feed-forward output projections, whose input width of 6826 is not a multiple of the quantization group size, stay in bf16. At `-q 4` and below the per-pixel adaLN projections of the pixel stage (2560 to 16384, they set individual pixel values) stay in bf16 too: quantized to 4 bits they print a faint screen-door grain over flat areas and fur. Measured on an M4 Pro (64 GB), Turbo, 1024×1024, seed 42. The transformer and the text encoder are both in memory while the weights load and the prompt is encoded; mflux then releases the text encoder, which is why the peak while generating is lower. The PSNR compares each image with the unquantized one: the composition is the same, the fine detail differs, and `-q 4` is visibly softer.
 
