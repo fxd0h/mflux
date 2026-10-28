@@ -23,6 +23,7 @@ from mflux.models.iris.variants import Iris
 class _StubIris:
     # Records what the CLI hands the model instead of loading 14 GB of weights.
     instances: list = []
+    few_step = None
 
     def __init__(self, **kwargs):
         self.kwargs = kwargs
@@ -117,6 +118,18 @@ class TestIrisGenerateCli:
 
         assert by_name.kwargs["model_config"] is AVAILABLE_MODELS["iris-3b-base"]
         assert by_flag.kwargs["model_config"] is AVAILABLE_MODELS["iris-3b-base"]
+
+    def test_loras_reach_the_model_and_a_few_step_lora_warns_about_guidance(self, run_cli, monkeypatch, tmp_path):
+        style, turbo = tmp_path / "style.safetensors", tmp_path / "turbo.safetensors"
+        style.touch()
+        turbo.touch()
+        model, warned = run_cli("--model", "iris-3b-base", "--lora", str(style), "0.5")
+        assert (model.kwargs["lora_paths"], model.kwargs["lora_scales"]) == ([str(style)], [0.5])
+        assert not any("--guidance" in w for w in warned)
+
+        monkeypatch.setattr(_StubIris, "few_step", (4, 4.0))
+        _, warned = run_cli("--model", "iris-3b-base", "--lora", str(turbo), "--guidance", "3.0")
+        assert any(w.startswith("--guidance is ignored; a few-step LoRA") for w in warned)
 
     def test_a_foreign_model_is_rejected(self, run_cli):
         with pytest.raises(Exception, match="only accepts the aliases"):

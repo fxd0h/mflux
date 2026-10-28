@@ -73,6 +73,11 @@ def main():
         model_path=args.model_path,
         **lora_init_kwargs_from_args(args),
     )
+    if model.few_step is not None and model_config.supports_guidance:
+        CommandLineParser.warn_ignored_options({
+            "--guidance": "a few-step LoRA has its guidance distilled in and runs without CFG.",
+            "--negative-prompt": "a few-step LoRA runs without CFG, so the negative prompt is never encoded.",
+        })  # fmt: off
 
     memory_saver = CallbackManager.register_callbacks(
         args=args,
