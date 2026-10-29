@@ -6,6 +6,7 @@ from pathlib import Path
 import mlx.core as mx
 import mlx.core.random as mx_random  # type: ignore[import-not-found]
 
+from mflux.models.anima.training_adapter.anima_training_adapter import AnimaTrainingAdapter
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.training.adapters.base import TrainingAdapter
 from mflux.models.common.training.dataset.batch import DataItem
@@ -102,6 +103,7 @@ class TrainingRunner:
             ModelConfig.krea2_raw().model_name,
         }
         is_fibo2 = model_config.model_name == ModelConfig.fibo2().model_name
+        is_anima = model_config.model_name == ModelConfig.anima_base().model_name
         if training_spec.is_edit and not is_flux2_base:
             raise ValueError("Edit training currently supports only FLUX.2-klein-base models.")
         if is_ernie:
@@ -116,6 +118,8 @@ class TrainingRunner:
             adapter_class = Krea2TrainingAdapter
         elif is_fibo2:
             adapter_class = Fibo2TrainingAdapter
+        elif is_anima:
+            adapter_class = AnimaTrainingAdapter
         else:
             raise ValueError("Flux1 training is no longer supported.")
 
