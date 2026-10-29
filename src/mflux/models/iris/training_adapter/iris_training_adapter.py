@@ -44,9 +44,11 @@ class IrisTrainingAdapter(TrainingAdapter):
     def create_config(self, training_spec: TrainingSpec, *, width: int, height: int) -> Config:
         # A config without guidance gives 0.0; the preview then uses the base model's default
         self._guidance = training_spec.guidance or None
+        # The step count is the size of the training grid, 1000 levels as in the reference trainer. The previews get
+        # training_spec.steps on their own
         return Config(
             model_config=self._model_config,
-            num_inference_steps=training_spec.steps,
+            num_inference_steps=IrisTrainingSchedule.NUM_TRAIN_TIMESTEPS,
             width=width,
             height=height,
             guidance=training_spec.guidance,

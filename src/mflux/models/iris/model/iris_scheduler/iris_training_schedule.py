@@ -10,8 +10,8 @@ if TYPE_CHECKING:
 
 
 class IrisTrainingSchedule(BaseScheduler):
-    # The noise levels mflux-train draws from for Iris: an even grid from pure noise, shifted as the reference trainer
-    # shifts its draws, by 2 at 256x256, 3 at 512 and 4 at 1024 (the stage configs of speridlabs/iris-3b). The default
+    # The noise levels mflux-train draws from for Iris: an even grid of NUM_TRAIN_TIMESTEPS levels from pure noise (the
+    # adapter's config asks for that many steps), shifted as the reference trainer shifts its draws, by 2 at 256x256, 3 at 512 and 4 at 1024 (the stage configs of speridlabs/iris-3b). The default
     # uniform draw over this grid is what mflux recommends: the reference trainer's logit-normal draw ("timestep_type":
     # "sigmoid") rarely reaches the highest noise levels, and in style LoRAs it learned the colors less reliably.
     NUM_TRAIN_TIMESTEPS = 1000

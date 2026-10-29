@@ -93,7 +93,7 @@ On an M5 Max at 1024×1024 that takes about 1 second per step and 8 to 9 seconds
 mflux-train --config train.json
 ```
 
-Iris works on pixels, so a training image is used as it is, with no VAE. The noise levels are an even grid from pure noise, shifted by resolution as the [reference trainer](https://github.com/speridlabs/iris-3b) shifts them: 2 at 256×256, 3 at 512×512 and 4 at 1024×1024. Each image gets the shift of its own size. Leave `timestep_type` unset to draw uniformly from that grid. The reference trainer draws from a logit-normal distribution (`"timestep_type": "sigmoid"`), which rarely reaches the highest noise levels. In our style tests it learned the colors less reliably (numbers below); on a character dataset the two came out the same.
+Iris works on pixels, so a training image is used as it is, with no VAE. The noise levels are an even grid of 1000 levels from pure noise, as in the reference trainer, shifted by resolution as the [reference trainer](https://github.com/speridlabs/iris-3b) shifts them: 2 at 256×256, 3 at 512×512 and 4 at 1024×1024. Each image gets the shift of its own size. Leave `timestep_type` unset to draw uniformly from that grid. The reference trainer draws from a logit-normal distribution (`"timestep_type": "sigmoid"`), which rarely reaches the highest noise levels. In our style tests it learned the colors less reliably (numbers below); on a character dataset the two came out the same.
 
 A config for the 24 transformer blocks with rank 16, the layers ai-toolkit trains. All 311 linear layers can take a target:
 
@@ -139,7 +139,7 @@ A config for the 24 transformer blocks with rank 16, the layers ai-toolkit train
 }
 ```
 
-`steps` and `guidance` are for the preview images. Blocks 0 to 7 are dual-stream (`_x` for the image, `_y` for the text) and 8 to 23 single-stream. Once the captions are encoded, mflux encodes the preview prompts and lets the 8.9 GB Qwen3-VL text encoder go. The LoRA is saved with ai-toolkit's keys and shapes (`diffusion_model.*`, PEFT `lora_A`/`lora_B`), and loads with `--lora`.
+`steps` and `guidance` are for the preview images; training draws from its 1000 levels whatever `steps` is. Blocks 0 to 7 are dual-stream (`_x` for the image, `_y` for the text) and 8 to 23 single-stream. Once the captions are encoded, mflux encodes the preview prompts and lets the 8.9 GB Qwen3-VL text encoder go. The LoRA is saved with ai-toolkit's keys and shapes (`diffusion_model.*`, PEFT `lora_A`/`lora_B`), and loads with `--lora`.
 
 Against ai-toolkit on an M5 Max, with the same 12 images and the config above (300 steps at 512×512, rank 16, gradient checkpointing on both), 3 runs each:
 
@@ -149,7 +149,9 @@ Against ai-toolkit on an M5 Max, with the same 12 images and the config above (3
 | mflux | 1.03 to 1.24 s | 10.8 GB¹ | 0.86, 0.88, 0.86 |
 | mflux, `"timestep_type": "sigmoid"` | 1.03 to 1.15 s | 18.8 GB² | 0.67, 0.36, 0.77 |
 
-The style score is the share of pixels in the dataset's blueprint blue on 3 prompts outside the training images, each LoRA generated in mflux. Runs at the same time of day took 10 to 17% less time per step in mflux. ¹ Run 1 repeated with the text encoder released, same score; the three runs kept it and peaked at 18.8 GB. ² With the text encoder kept. `"quantize": 8` trains over a quantized base: a short run with previews on peaked at about 13 GB.
+The style score is the share of pixels in the dataset's blueprint blue on 3 prompts outside the training images, each LoRA generated in mflux. Runs at the same time of day took 10 to 17% less time per step in mflux. ¹ Run 1 repeated with the text encoder released, same score; the three runs kept it and peaked at 18.8 GB. ² With the text encoder kept. These runs drew from a 30-level grid; run 1 repeated on the 1000 levels training uses now scored the same, 0.86. `"quantize": 8` trains over a quantized base: a short run with previews on peaked at about 13 GB.
+
+Without `"low_ram": true` the runner keeps every caption's encoding in memory, about 18 MB per image: nothing for these 12 images, about 9 GB for 500. Set it for a large dataset.
 
 For speed over memory, set `"gradient_checkpointing": false`: a step took 0.78 s instead of 1.05 s, and the peak went from 10.7 to 21 GB. Releasing the text encoder costs no time, since training never runs it again once the captions are encoded.
 

@@ -111,9 +111,12 @@ def test_predict_noise_feeds_one_thousand_times_sigma_and_returns_the_velocity(m
 
 def test_the_config_uses_the_training_schedule_and_the_preview_its_default_guidance(monkeypatch):
     adapter = _adapter(monkeypatch)
-    spec = SimpleNamespace(steps=30, guidance=0.0, lora_layers=LoraLayersSpec(targets=[]))
+    # The training grid has the reference trainer's 1000 levels whatever the preview step count, so at 4 preview steps
+    # training still reaches the low noise levels
+    spec = SimpleNamespace(steps=4, guidance=0.0, lora_layers=LoraLayersSpec(targets=[]))
     config = adapter.create_config(spec, width=512, height=512)
-    assert isinstance(config.scheduler, IrisTrainingSchedule) and config.scheduler.sigmas.shape == (31,)
+    assert isinstance(config.scheduler, IrisTrainingSchedule) and config.scheduler.sigmas.shape == (1001,)
+    assert config.num_inference_steps == 1000 and float(config.scheduler.sigmas[-2]) < 0.01
     assert adapter.generate_preview_image(seed=1, prompt="a fox", width=64, height=64, steps=4) == "preview-image"
     assert adapter._iris.generated["guidance"] is None
     # The cached encodings live on the module, where training would treat them as parameters
@@ -209,7 +212,8 @@ def test_each_item_trains_on_the_shift_of_its_own_size(monkeypatch):
     adapter.predict_noise = predict_noise
     item = DataItem(data_id=0, prompt="a fox", image_path="x.png", clean_latents=mx.zeros((1, 3, 512, 512)), cond={}, width=512, height=512)  # fmt: off
     TrainingTrainer._single_example_loss(adapter, spec, base_config, item, random.Random(0))
-    assert seen["sigmas"].tolist() == pytest.approx([1.0, 0.9, 0.75, 0.5, 0.0])
+    expected = IrisTrainingSchedule(SimpleNamespace(num_inference_steps=1000, height=512, width=512)).sigmas
+    assert mx.array_equal(seen["sigmas"], expected).item()
 
 
 def test_the_conditioning_goes_through_the_low_ram_data_cache(monkeypatch, tmp_path):
