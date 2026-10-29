@@ -1,3 +1,5 @@
+import re
+
 from mflux.models.common.lora.mapping.lora_mapping import LoRAMapping, LoRATarget
 
 
@@ -16,6 +18,15 @@ class IrisLoRAMapping(LoRAMapping):
     @staticmethod
     def get_mapping() -> list[LoRATarget]:
         return [IrisLoRAMapping._target(path) for path in IrisLoRAMapping.module_paths()]
+
+    @staticmethod
+    def reference_name(module_path: str) -> str:
+        # The reference checkpoint's name for a concrete MLX module path, e.g. y_embedder.layer_blocks.1.mlp.fc1
+        for mlx_name, reference in IrisLoRAMapping.REFERENCE_NAMES.items():
+            match = re.fullmatch(re.escape(mlx_name).replace(re.escape("{block}"), r"(\d+)"), module_path)
+            if match:
+                return reference.format(block=match.group(1)) if match.groups() else reference
+        return module_path
 
     @staticmethod
     def module_paths() -> list[str]:

@@ -4,6 +4,8 @@ from types import SimpleNamespace
 import mlx.core as mx
 import pytest
 
+from mflux.models.anima.model.anima_scheduler.anima_scheduler import AnimaScheduler
+from mflux.models.anima.model.anima_text_encoder.anima_prompt_weights import AnimaPromptWeights
 from mflux.models.anima.model.anima_transformer.anima_transformer import AnimaTransformer
 from mflux.models.anima.training_adapter import anima_training_adapter as anima_adapter_module
 from mflux.models.anima.weights.anima_lora_mapping import AnimaLoRAMapping
@@ -60,7 +62,7 @@ def test_the_schedule_is_anima_and_the_preview_uses_the_training_guidance(monkey
     )
     adapter.generate_preview_image(seed=7, prompt="bluxyz, a guitar", width=512, height=512, steps=30)
 
-    assert config.scheduler.sigmas.shape[0] == 31
+    assert mx.array_equal(config.scheduler.sigmas, AnimaScheduler.compute_sigmas(30)).item()
     assert adapter._anima.last_generate_kwargs["guidance"] == 4.0
 
 
@@ -155,6 +157,11 @@ def test_captions_are_encoded_as_plain_text(monkeypatch):
     caption = "1girl, hatsune miku (vocaloid), smile"
     weights = encoder_module.AnimaPromptEncoder.encode(caption, _Tokenizer(), _Tokenizer(), text_encoder, transformer, weighted=False)  # fmt: off
     assert weights is None and seen == [caption, caption]
+    # A caption escaped for A1111 or ComfyUI trains on the text the same escaped prompt gives at inference
+    seen.clear()
+    escaped = "1girl, hatsune miku \\(vocaloid\\), smile"
+    encoder_module.AnimaPromptEncoder.encode(escaped, _Tokenizer(), _Tokenizer(), text_encoder, transformer, weighted=False)  # fmt: off
+    assert seen == [caption, caption] == [AnimaPromptWeights.parse(escaped)[0][0]] * 2
 
 
 @pytest.mark.fast

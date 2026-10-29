@@ -20,6 +20,11 @@ class AnimaPromptWeights:
         ]
 
     @staticmethod
+    def unescape(text: str) -> str:
+        # \( and \) as parse leaves them, for text read without weights
+        return text.replace("\\(", "(").replace("\\)", ")")
+
+    @staticmethod
     def is_plain(parts: list[tuple[str, float]]) -> bool:
         # No weights and one part (an empty prompt has none): the prompt is tokenized whole, as before
         return len(parts) <= 1 and all(weight == 1.0 for _, weight in parts)

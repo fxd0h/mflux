@@ -86,6 +86,75 @@ mflux-generate-iris \
 
 On an M5 Max at 1024×1024 that takes about 1 second per step and 8 to 9 seconds for the whole run, loading included, against 2.6 seconds per step for the base model with CFG.
 
+## Training
+`mflux-train` trains a LoRA on the base model, for text to image. Turbo is distilled, so it is not trained. For the folder of images and captions, see the common [training docs](../common/README.md#training-lora).
+
+```sh
+mflux-train --config train.json
+```
+
+Iris works on pixels, so a training image is used as it is, with no VAE. The noise levels are an even grid of 1000 levels from pure noise, as in the reference trainer, shifted by resolution as the [reference trainer](https://github.com/speridlabs/iris-3b) shifts them: 2 at 256×256, 3 at 512×512 and 4 at 1024×1024. Each image gets the shift of its own size. Leave `timestep_type` unset to draw uniformly from that grid. The reference trainer draws from a logit-normal distribution (`"timestep_type": "sigmoid"`), which rarely reaches the highest noise levels. In our style tests it learned the colors less reliably (numbers below); on a character dataset the two came out the same.
+
+A config for the 24 transformer blocks with rank 16, the layers ai-toolkit trains. All 311 linear layers can take a target:
+
+```json
+{
+  "model": "iris-3b-base",
+  "data": "/path/to/images",
+  "seed": 42,
+  "steps": 30,
+  "guidance": 3.0,
+  "max_resolution": 512,
+  "gradient_checkpointing": true,
+  "cache_limit_gb": 2,
+  "training_loop": { "num_epochs": 25, "batch_size": 1 },
+  "optimizer": { "name": "AdamW", "learning_rate": 1e-4 },
+  "checkpoint": { "output_path": "output", "save_frequency": 300 },
+  "lora_layers": { "targets": [
+    { "module_path": "blocks.{block}.attn.q_proj_x", "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn.q_proj_y", "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn.k_proj_x", "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn.k_proj_y", "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn.v_proj_x", "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn.v_proj_y", "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn.proj_x",   "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn.proj_y",   "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn_gate_x",   "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn_gate_y",   "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.mlp_x.w1",      "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.mlp_x.w2",      "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.mlp_x.w3",      "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.mlp_y.w1",      "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.mlp_y.w2",      "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.mlp_y.w3",      "blocks": { "start": 0, "end": 8 }, "rank": 16 },
+    { "module_path": "blocks.{block}.q_proj",        "blocks": { "start": 8, "end": 24 }, "rank": 16 },
+    { "module_path": "blocks.{block}.k_proj",        "blocks": { "start": 8, "end": 24 }, "rank": 16 },
+    { "module_path": "blocks.{block}.v_proj",        "blocks": { "start": 8, "end": 24 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn_gate",     "blocks": { "start": 8, "end": 24 }, "rank": 16 },
+    { "module_path": "blocks.{block}.attn_proj",     "blocks": { "start": 8, "end": 24 }, "rank": 16 },
+    { "module_path": "blocks.{block}.mlp.w1",        "blocks": { "start": 8, "end": 24 }, "rank": 16 },
+    { "module_path": "blocks.{block}.mlp.w2",        "blocks": { "start": 8, "end": 24 }, "rank": 16 },
+    { "module_path": "blocks.{block}.mlp.w3",        "blocks": { "start": 8, "end": 24 }, "rank": 16 }
+  ] }
+}
+```
+
+`steps` and `guidance` are for the preview images; training draws from its 1000 levels whatever `steps` is. Blocks 0 to 7 are dual-stream (`_x` for the image, `_y` for the text) and 8 to 23 single-stream. Once the captions are encoded, mflux encodes the preview prompts and lets the 8.9 GB Qwen3-VL text encoder go. The LoRA is saved with ai-toolkit's keys and shapes (`diffusion_model.*`, PEFT `lora_A`/`lora_B`), and loads with `--lora`.
+
+Against ai-toolkit on an M5 Max, with the same 12 images and the config above (300 steps at 512×512, rank 16, gradient checkpointing on both), 3 runs each:
+
+| | per step | peak memory | style score |
+| --- | --- | --- | --- |
+| ai-toolkit | 1.23 to 1.37 s | 17.1 GB | 0.88, 0.86, 0.87 |
+| mflux | 1.03 to 1.24 s | 10.8 GB¹ | 0.86, 0.88, 0.86 |
+| mflux, `"timestep_type": "sigmoid"` | 1.03 to 1.15 s | 18.8 GB² | 0.67, 0.36, 0.77 |
+
+The style score is the share of pixels in the dataset's blueprint blue on 3 prompts outside the training images, each LoRA generated in mflux. Runs at the same time of day took 10 to 17% less time per step in mflux. ¹ Run 1 repeated with the text encoder released, same score; the three runs kept it and peaked at 18.8 GB. ² With the text encoder kept. These runs drew from a 30-level grid; run 1 repeated on the 1000 levels training uses now scored the same, 0.86. `"quantize": 8` trains over a quantized base: a short run with previews on peaked at about 13 GB.
+
+Without `"low_ram": true` the runner keeps every caption's encoding in memory, about 18 MB per image: nothing for these 12 images, about 9 GB for 500. Set it for a large dataset.
+
+For speed over memory, set `"gradient_checkpointing": false`: a step took 0.78 s instead of 1.05 s, and the peak went from 10.7 to 21 GB. Releasing the text encoder costs no time, since training never runs it again once the captions are encoded.
+
 ## Quantization
 `-q 4` and `-q 8` quantize the model when it loads, the transformer and the text encoder. Small layers (the pixel-stage embedder, MLPs and head, the 12-to-1 layer pooling) and the feed-forward output projections, whose input width of 6826 is not a multiple of the quantization group size, stay in bf16. At `-q 4` and below the per-pixel adaLN projections of the pixel stage (2560 to 16384, they set individual pixel values) stay in bf16 too: quantized to 4 bits they print a faint screen-door grain over flat areas and fur. Measured on an M4 Pro (64 GB), Turbo, 1024×1024, seed 42. The transformer and the text encoder are both in memory while the weights load and the prompt is encoded; mflux then releases the text encoder, which is why the peak while generating is lower. The PSNR compares each image with the unquantized one: the composition is the same, the fine detail differs, and `-q 4` is visibly softer.
 
@@ -120,7 +189,7 @@ The saved directory holds the transformer, the text encoder and the tokenizer, s
 - Sizes must be multiples of 16. Turbo was trained at about one megapixel: much smaller sizes show 16×16 patch artifacts, in the reference implementation too.
 - `mflux-generate-iris` has no `--scheduler`, `--compute-precision` or `--vae-tiling` options: the model has no VAE and the samplers are part of the checkpoints. The transformer runs the attention queries and keys in float32; with bf16 queries and keys, single patches of flat regions came out visibly off.
 - Both entries share one Hugging Face repository. `--model iris-3b` (default, aliases `iris-3b-turbo`, `iris-turbo`, `iris`) selects Turbo, `--model iris-3b-base` (alias `iris-base`) the base model.
-- Not ported from the reference implementation: depth estimation and the upscaler fine-tunes, and training. `mflux-train` is not available for this model.
+- Not ported from the reference implementation: depth estimation and the upscaler fine-tunes.
 - Slow golden tests are not part of this port; `tests/` holds fast tests for the weight mapping, quantization, prompt encoding, samplers, CLI and saving.
 
 ## License and attribution

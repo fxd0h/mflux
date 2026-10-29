@@ -111,11 +111,14 @@ class IrisTransformer(nn.Module):
         img_core = self.modulation_cores["adaln_img"](cond)
         txt_core = self.modulation_cores["adaln_txt"](cond)
 
+        # Training can recompute each block's activations in the backward pass instead of keeping them
+        checkpointing = getattr(self, "gradient_checkpointing", False)
         for i, block in enumerate(self.blocks):
+            run = nn.utils.checkpoint(block) if checkpointing else block
             if isinstance(block, IrisDualStreamBlock):
-                s, y = block(s, y, img_core, txt_core, rope_img, rope_txt)
+                s, y = run(s, y, img_core, txt_core, rope_img, rope_txt)
             else:
-                s, y = block(s, y, img_core, rope_img, rope_txt)
+                s, y = run(s, y, img_core, rope_img, rope_txt)
             self._capture(captures, f"blocks.{i}.s", s)
             self._capture(captures, f"blocks.{i}.y", y)
 
@@ -125,7 +128,7 @@ class IrisTransformer(nn.Module):
         self._capture(captures, "pixel_embedder", pixels)
         rope_pix = IrisRope.rope_2d(self.pixel_head_dim, *grid, self.rope_theta, self.rope_scale)
         for i, block in enumerate(self.pixel_blocks):
-            pixels = block(pixels, s_cond, rope_pix, grid)
+            pixels = (nn.utils.checkpoint(block) if checkpointing else block)(pixels, s_cond, rope_pix, grid)
             self._capture(captures, f"pixel_blocks.{i}", pixels)
         return self._fold(self.final_layer(pixels), batch, grid)
 
