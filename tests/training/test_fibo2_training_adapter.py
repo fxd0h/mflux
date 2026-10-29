@@ -218,6 +218,11 @@ def test_the_saved_lora_has_comfyui_keys_and_loads_back_at_its_strength(monkeypa
     resumed.load_lora_adapter(path=path)
     assert mx.allclose(_Fake.output(resumed.transformer()), expected, rtol=1e-5, atol=1e-4).item()
 
+    # Through the fused mapping, as --lora and ComfyUI read the file, without the per-module split of a resume
+    fused = Fibo2TrainingAdapter(model_config=ModelConfig.fibo2(), quantize=None)
+    fused.load_training_adapter(path=path)
+    assert mx.allclose(_Fake.output(fused.transformer()), expected, rtol=1e-5, atol=1e-4).item()
+
     # A resumed run saves the same strength again
     again = tmp_path / "again.safetensors"
     resumed.save_lora_adapter(path=again, training_spec=spec)
