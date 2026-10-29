@@ -122,16 +122,16 @@ MFLUX supports the following model families. They have different strengths and w
 | Model | Release date | Size | Type | Training | Description |
 | --- | --- | --- | --- | --- | --- |
 |[Z-Image](src/mflux/models/z_image/README.md) | Nov 2025 | 6B | Distilled & Base | Yes | Fast, small, very good quality and realism. |
-|[Krea 2](src/mflux/models/krea2/README.md) | Jun 2026 | 12B | Turbo (distilled) | No | Very good quality with a wide range of styles; good for creative exploration. |
+|[Krea 2](src/mflux/models/krea2/README.md) | Jun 2026 | 12B | Turbo (distilled) | Yes | Very good quality with a wide range of styles; good for creative exploration. |
 |[FLUX.2](src/mflux/models/flux2/README.md) | Jan 2026 | 4B & 9B | Distilled & Base | Yes | Fastest + smallest with very good quality and edit capabilities. |
 |[FLUX 3 Image Klein](src/mflux/models/flux3/README.md) | Oct 2026 | 5.6B (+4B TE) | Distilled & Base | No | Text-to-image and editing with up to 10 reference images in one model; bounding-box layouts, strong text rendering. 16 steps distilled, 50 steps Base. |
 |[Iris-3B](src/mflux/models/iris/README.md) | Oct 2026 | 3B (+4B TE) | Turbo (distilled) & Base | No | Pixel-space diffusion transformer: no VAE, direct RGB generation. 4 steps Turbo, 100 steps base. |
 |[Ideogram 4](src/mflux/models/ideogram4/README.md) | Jun 2026 | 9B | Base | No | JSON-caption-native, typography-focused text-to-image generation. |
-|[ERNIE-Image](src/mflux/models/ernie_image/README.md) | Apr 2026 | 8B | Distilled & Base | No | Single-stream DiT from Baidu. Vivid, high-contrast output. |
+|[ERNIE-Image](src/mflux/models/ernie_image/README.md) | Apr 2026 | 8B | Distilled & Base | Yes | Single-stream DiT from Baidu. Vivid, high-contrast output. |
 |[Lens](src/mflux/models/lens/README.md) | May 2026 | 3.8B (+20B TE) | Turbo (distilled) | No | Dual-stream MMDiT from Microsoft with a GPT-OSS text encoder. Strong prompt adherence in 4 steps. |
 |[Ming-Image](src/mflux/models/ming_image/README.md) | Sep 2026 | 6.15B (+16B MoE TE) | Base | No | Design-focused (posters, cards, UI) with strong typography; outputs RGBA. |
 |[MOSS-Image](src/mflux/models/moss_image/README.md) | Oct 2026 | 4.9B (+9B TE) | SFT & Base | No | Single-stream DiT from OpenMOSS with a Qwen3.5 text encoder. Takes natural-language, tag and JSON-layout prompts. Renders English and Chinese text. 50 steps with CFG, or 8 or 4 steps with a community step-distilled LoRA. |
-|[Anima](src/mflux/models/anima/README.md) | Jan 2026 | 2B (+0.6B TE) | Turbo (distilled), Aesthetic & Base | No | Anime and illustration model from CircleStone Labs and Comfy Org on Cosmos-Predict2, with a Qwen3 text encoder. Danbooru tags and natural language. 10 steps Turbo, 30 steps with CFG for Aesthetic and Base. |
+|[Anima](src/mflux/models/anima/README.md) | Jan 2026 | 2B (+0.6B TE) | Turbo (distilled), Aesthetic & Base | Yes | Anime and illustration model from CircleStone Labs and Comfy Org on Cosmos-Predict2, with a Qwen3 text encoder. Danbooru tags and natural language. 10 steps Turbo, 30 steps with CFG for Aesthetic and Base. |
 |[Boogu Image](src/mflux/models/boogu/README.md) | Jun 2026 | 10B | Turbo (distilled) | No | DMD-distilled 4-step model with a photographic look and bilingual (EN/ZH) text rendering. |
 |[FIBO 2](src/mflux/models/fibo2/README.md) | Oct 2026 | 8.1B (+4B TE) | Base & Edit Turbo (distilled) | No | Trained on long structured JSON captions for precise control; renders text. Text-to-image and editing of 1 to 5 images, with masks. 50 steps with CFG; Edit Turbo runs 4 without. |
 |[SeedVR2](src/mflux/models/seedvr2/README.md) | Jun 2025 | 3B & 7B | — | No | Best upscaling model. |

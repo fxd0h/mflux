@@ -143,6 +143,44 @@ unset, steps and guidance follow the variant. `Anima(...)` takes `model_path`, `
 
 </details>
 
+## Training
+
+`mflux-train` trains Anima LoRAs on Base, as the model card and ai-toolkit advise. Aesthetic, a finetune of Base,
+trains too; Turbo is distilled and refused. Start from
+[`train_anima.json`](../common/training/_example/train_anima.json): rank 16 on the attention, MLP and AdaLN
+modulation layers of all 28 blocks, at 512, AdamW at 1e-4. For the dataset layout see the common
+[training docs](../common/README.md#training-lora). Captions are read as plain text: `hatsune miku (vocaloid)` is a
+tag, not a prompt weight, and the parentheses don't need escaping.
+
+```sh
+mflux-train --config /path/to/train_anima.json
+```
+
+The LoRA is saved with ComfyUI's keys (`diffusion_model.blocks.N...`), the same ones ai-toolkit writes, so it loads
+in mflux, ComfyUI and ai-toolkit. The example sets `"gradient_checkpointing": true` and `"cache_limit_gb": 2`, which
+keep the peak at about 11 GB. With the cache limit and no checkpointing the run is faster (0.49 s a step) and peaks
+at 13.2 GB. Without the cache limit MLX keeps freed buffers and the peak reaches 17.9 GB, with or without
+checkpointing.
+
+Measured on an M5 Max with the same 12 images, 300 steps at 512, rank 16, against ai-toolkit (73ebae1, MPS,
+gradient checkpointing on, its default):
+
+| Trainer | Time per step | 300 steps | Whole run | Peak memory |
+| --- | --- | --- | --- | --- |
+| ai-toolkit | 1.28 s | 6:23 | 524 s | 11.3 GB |
+| mflux, `gradient_checkpointing` and `cache_limit_gb: 2` | 0.61 s | 3:04 | 208 s | 11.2 GB |
+| mflux, `cache_limit_gb: 2` | 0.49 s | 2:27 | 171 s | 13.2 GB |
+
+Three LoRAs from each trainer on a blueprint style, scored on 3 prompts and 2 seeds by the share of pixels in the
+dataset's blueprint blue (0.91 on the training images, 0.14 without a LoRA): mflux 0.91, 0.92 and 0.90, every image
+in the style, the unseen lighthouse included; ai-toolkit 0.66, 0.44 and 0.16, from one run to the next. This is
+one style dataset. On a 40-image character dataset (320 steps) both trainers learned the character in all three
+runs, hair, eyes and accessory kept in new scenes, so quality was comparable on that dataset; mflux took 3:23 to
+3:46 per run against 7:06 to 8:19, at 11.3 to 11.6 GB against 11.9 to 13.4 GB. Applied
+to the same states step by step,
+mflux and ComfyUI agree within 4% with either LoRA (the bfloat16 difference without a LoRA), against 35 to 39%
+when mflux runs without it.
+
 ## Weights
 
 The model loads from `circlestone-labs/Anima`, and only the files of the variant in use are downloaded: one
