@@ -40,7 +40,7 @@ class IrisPixelEmbedder(nn.Module):
         batch, _, height, width = x.shape
         p = self.patch_size
         tokens = self.proj(x.transpose(0, 2, 3, 1))
-        tokens = tokens + self._pos_embed(height, width, self.proj.weight.shape[0]).astype(tokens.dtype)
+        tokens = tokens + self._pos_embed(height, width, tokens.shape[-1]).astype(tokens.dtype)
         tokens = tokens.reshape(batch, height // p, p, width // p, p, -1).transpose(0, 1, 3, 2, 4, 5)
         return tokens.reshape(batch * (height // p) * (width // p), p * p, -1)
 

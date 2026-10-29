@@ -8,13 +8,14 @@ class PeftLoRAMetadata:
     # per-layer .alpha tensors. A pipeline save prefixes each config key with its component ("transformer.lora_alpha");
     # a model save does not. Without it a layer's update would be applied at alpha = rank.
     METADATA_KEY = "lora_adapter_metadata"
+    WHOLE_FILE = "*"
 
     @staticmethod
     def configs(metadata: dict[str, str] | None) -> dict[str, dict]:
         # The LoRA configs in the file, by component prefix ("" for a model save); empty when there are none
         raw = (metadata or {}).get(PeftLoRAMetadata.METADATA_KEY)
         if not raw:
-            return {}
+            return PeftLoRAMetadata._file_alpha(metadata)
         try:
             flat = json.loads(raw)
         except json.JSONDecodeError:
@@ -28,9 +29,23 @@ class PeftLoRAMetadata:
         return {component: config for component, config in configs.items() if "lora_alpha" in config}
 
     @staticmethod
+    def _file_alpha(metadata: dict[str, str] | None) -> dict[str, dict]:
+        # One rank and alpha for the whole file, as the Iris few-step fork (pentacoxian-dev/iris-3b-turbo-lora)
+        # records them, with the update scaled by alpha / rank
+        try:
+            alpha, rank = float((metadata or {})["alpha"]), float((metadata or {})["rank"])
+        except (KeyError, TypeError, ValueError):
+            return {}
+        if not (math.isfinite(alpha) and math.isfinite(rank) and rank > 0):
+            return {}
+        return {PeftLoRAMetadata.WHOLE_FILE: {"lora_alpha": alpha}}
+
+    @staticmethod
     def alpha(weight_key: str, configs: dict[str, dict], rank: int) -> float | None:
         # The .alpha value that gives this layer the scale PEFT gives it: lora_alpha / rank, or lora_alpha / sqrt(rank)
         # with rsLoRA, where alpha_pattern can set lora_alpha per module. None when no config covers the key
+        if PeftLoRAMetadata.WHOLE_FILE in configs:
+            return float(configs[PeftLoRAMetadata.WHOLE_FILE]["lora_alpha"])
         found = PeftLoRAMetadata._config_for(weight_key, configs)
         if found is None:
             return None

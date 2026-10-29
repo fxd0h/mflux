@@ -54,11 +54,19 @@ class Iris(nn.Module):
     def is_turbo(self) -> bool:
         return not self.model_config.supports_guidance
 
+    # The weights would keep the LoRA but the saved model has no record of its sampler, so it would run the base
+    # model's 100 steps with CFG
+    SAVE_REFUSAL = "A few-step LoRA changes the sampler, which a saved model cannot record. Save the model without it and pass --lora when you generate."  # fmt: off
+
+    @staticmethod
+    def check_save(model_config: ModelConfig, lora_paths: list[str] | None, lora_scales: list[float] | None) -> None:
+        # The same refusal as save_model, from the LoRA file headers only, so mflux-save stops before the load
+        if model_config.supports_guidance and IrisFewStepScheduler.from_lora_files(lora_paths, lora_scales):
+            raise ValueError(Iris.SAVE_REFUSAL)
+
     def save_model(self, base_path: str) -> None:
         if self.few_step is not None:
-            # The weights would keep the LoRA but the saved model has no record of its sampler, so it would run the
-            # base model's 100 steps with CFG
-            raise ValueError("A few-step LoRA changes the sampler, which a saved model cannot record. Save the model without it and pass --lora when you generate.")  # fmt: off
+            raise ValueError(Iris.SAVE_REFUSAL)
         ModelSaver.save_model(
             model=self,
             bits=self.bits,

@@ -215,3 +215,64 @@ def test_a_model_with_a_few_step_lora_cannot_be_saved(tmp_path):
     model.few_step = (4, 4.0)
     with pytest.raises(ValueError, match="cannot record"):
         model.save_model(str(tmp_path))
+
+
+def test_a_runtime_lora_on_every_linear_layer_runs(tmp_path):
+    # Without baking every target stays a LoRALinear, which has no .weight of its own (pixel_embedder.proj read it)
+    transformer = _tiny_transformer()
+    weights = {}
+    for i, path in enumerate(_linear_paths(transformer)):
+        out_dim, in_dim = dict(transformer.named_modules())[path].weight.shape
+        weights[f"{_reference_name(path)}.lora_down"] = mx.random.normal((2, in_dim), key=mx.random.key(2 * i)) * 0.01
+        weights[f"{_reference_name(path)}.lora_up"] = mx.random.normal((out_dim, 2), key=mx.random.key(2 * i + 1)) * 0.01  # fmt: off
+    file = tmp_path / "iris_lora.safetensors"
+    mx.save_safetensors(str(file), weights)
+    LoRALoader.load_and_apply_lora(IrisLoRAMapping.get_mapping(), transformer, [str(file)], [1.0], bake_lora=False)
+    assert mx.isfinite(_forward(transformer)).all().item()
+
+
+def test_the_rank_and_alpha_of_the_file_metadata_set_the_scale(tmp_path):
+    # The few-step fork records one rank and alpha for the file and scales the update by alpha / rank
+    path, rank = "blocks.2.mlp.w2", 2
+    linear = dict(_tiny_transformer().named_modules())[path]
+    out_dim, in_dim = linear.weight.shape
+    down = mx.random.normal((rank, in_dim), key=mx.random.key(0)) * 0.01
+    up = mx.random.normal((out_dim, rank), key=mx.random.key(1)) * 0.01
+    deltas = []
+    for metadata in ({"rank": "2", "alpha": "2.0"}, {"rank": "2", "alpha": "4.0"}):
+        file = tmp_path / f"fork_{metadata['alpha']}.safetensors"
+        mx.save_safetensors(str(file), {f"{_reference_name(path)}.lora_down": down, f"{_reference_name(path)}.lora_up": up}, metadata=metadata)  # fmt: off
+        transformer = _tiny_transformer()
+        before = dict(transformer.named_modules())[path].weight
+        LoRALoader.load_and_apply_lora(IrisLoRAMapping.get_mapping(), transformer, [str(file)], [1.0], bake_lora=True)
+        deltas.append(dict(transformer.named_modules())[path].weight - before)
+    assert mx.allclose(deltas[0], up @ down, atol=1e-5).item()
+    assert mx.allclose(deltas[1], 2 * up @ down, atol=1e-5).item()
+
+
+@pytest.mark.parametrize(
+    ("weights", "metadata"),
+    [({"a": mx.zeros((1,))}, {"format": "iris-turbo-svd-v1"}), ({"dense.final_layer.linear.bias": mx.zeros((1,))}, {})],
+    ids=["format", "dense-keys"],
+)
+def test_a_turbo_svd_file_is_refused(tmp_path, weights, metadata):
+    # Aikimi/iris-3b-turbo-svd-lora also replaces dense tensors, which a LoRA load would drop
+    file = tmp_path / "turbo_svd.safetensors"
+    mx.save_safetensors(str(file), weights, metadata=metadata)
+    with pytest.raises(ValueError, match="iris-turbo-svd-v1"):
+        IrisFewStepScheduler.refuse_turbo_svd([str(file)])
+    plain = tmp_path / "plain.safetensors"
+    mx.save_safetensors(str(plain), {"a": mx.zeros((1,))})
+    IrisFewStepScheduler.refuse_turbo_svd([str(plain)])
+
+
+def test_the_save_check_needs_only_the_lora_header(tmp_path):
+    from mflux.models.iris.variants.txt2img.iris import Iris
+
+    turbo = tmp_path / "student.safetensors"
+    mx.save_safetensors(str(turbo), {"a": mx.zeros((1,))}, metadata={"extra": json.dumps({"turbo_steps": 4})})
+    with pytest.raises(ValueError, match="cannot record"):
+        Iris.check_save(ModelConfig.iris_3b_base(), [str(turbo)], [1.0])
+    # Turbo keeps its own sampler, and a LoRA at scale 0 changes nothing
+    Iris.check_save(ModelConfig.iris_3b(), [str(turbo)], [1.0])
+    Iris.check_save(ModelConfig.iris_3b_base(), [str(turbo)], [0.0])
