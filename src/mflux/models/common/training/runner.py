@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import gc
-import random
 from pathlib import Path
 
 import mlx.core as mx
@@ -44,11 +43,12 @@ class TrainingRunner:
             lora.scale = 0.0
 
     @staticmethod
-    def _check_timestep_options(adapter: TrainingAdapter, training_spec: TrainingSpec) -> None:
-        # An adapter that draws its own noise levels has no grid for the timestep options to select from
+    def _check_timestep_options(adapter_class: type[TrainingAdapter], training_spec: TrainingSpec) -> None:
+        # An adapter that draws its own noise levels (it overrides sample_sigma) has no grid for the timestep options
+        # to select from. Checked on the class, so a bad config stops before the model loads
         loop = training_spec.training_loop
         timestep_options = loop.timestep_low != 0 or loop.timestep_high is not None or loop.timestep_type is not None
-        if timestep_options and adapter.sample_sigma(rng=random.Random(0), image_seq_len=4096) is not None:
+        if timestep_options and adapter_class.sample_sigma is not TrainingAdapter.sample_sigma:
             raise ValueError(
                 f"{training_spec.model} draws the noise level of each step itself: remove timestep_low, timestep_high "
                 "and timestep_type from training_loop."
@@ -105,33 +105,24 @@ class TrainingRunner:
         if training_spec.is_edit and not is_flux2_base:
             raise ValueError("Edit training currently supports only FLUX.2-klein-base models.")
         if is_ernie:
-            adapter = ErnieTrainingAdapter(
-                model_config=model_config, quantize=training_spec.quantize, model_path=training_spec.model_path
-            )
+            adapter_class = ErnieTrainingAdapter
         elif is_zimage:
-            adapter = ZImageTrainingAdapter(
-                model_config=model_config, quantize=training_spec.quantize, model_path=training_spec.model_path
-            )
+            adapter_class = ZImageTrainingAdapter
         elif training_spec.is_edit:
-            adapter = Flux2EditTrainingAdapter(
-                model_config=model_config, quantize=training_spec.quantize, model_path=training_spec.model_path
-            )
+            adapter_class = Flux2EditTrainingAdapter
         elif is_flux2:
-            adapter = Flux2TrainingAdapter(
-                model_config=model_config, quantize=training_spec.quantize, model_path=training_spec.model_path
-            )
+            adapter_class = Flux2TrainingAdapter
         elif is_krea2:
-            adapter = Krea2TrainingAdapter(
-                model_config=model_config, quantize=training_spec.quantize, model_path=training_spec.model_path
-            )
+            adapter_class = Krea2TrainingAdapter
         elif is_fibo2:
-            adapter = Fibo2TrainingAdapter(
-                model_config=model_config, quantize=training_spec.quantize, model_path=training_spec.model_path
-            )
+            adapter_class = Fibo2TrainingAdapter
         else:
             raise ValueError("Flux1 training is no longer supported.")
 
-        TrainingRunner._check_timestep_options(adapter, training_spec)
+        TrainingRunner._check_timestep_options(adapter_class, training_spec)
+        adapter = adapter_class(
+            model_config=model_config, quantize=training_spec.quantize, model_path=training_spec.model_path
+        )
 
         if training_spec.low_ram:
             TrainingRunner._apply_low_ram_tiling(adapter.model())

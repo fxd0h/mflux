@@ -150,12 +150,24 @@ class TestTimestepOptions:
         loop = SimpleNamespace(**{"timestep_low": 0, "timestep_high": None, "timestep_type": None, **option})
         spec = SimpleNamespace(model="fibo2", training_loop=loop)
         with pytest.raises(ValueError, match="remove timestep_low, timestep_high and timestep_type"):
-            runner_module.TrainingRunner._check_timestep_options(_ContinuousAdapter(), spec)
+            runner_module.TrainingRunner._check_timestep_options(_ContinuousAdapter, spec)
         # A grid adapter takes them
-        runner_module.TrainingRunner._check_timestep_options(_GridAdapter(), spec)
+        runner_module.TrainingRunner._check_timestep_options(_GridAdapter, spec)
+
+    def test_a_bad_config_stops_before_the_model_loads(self, monkeypatch, tmp_path):
+        from mflux.models.fibo2.training_adapter.fibo2_training_adapter import Fibo2TrainingAdapter
+
+        built = []
+        monkeypatch.setattr(Fibo2TrainingAdapter, "__init__", lambda self, **kwargs: built.append(kwargs))
+        loop = SimpleNamespace(timestep_low=0, timestep_high=None, timestep_type="sigmoid")
+        spec = SimpleNamespace(model="fibo2", training_loop=loop, cache_limit_gb=None, seed=0, is_edit=False)
+        monkeypatch.setattr(runner_module.TrainingSpec, "resolve", staticmethod(lambda **kwargs: spec))
+        with pytest.raises(ValueError, match="remove timestep_low"):
+            runner_module.TrainingRunner.train(config_path=str(tmp_path / "train.json"), resume_path=None)
+        assert built == []
 
 
-@pytest.mark.parametrize("alpha", [0, -4])
+@pytest.mark.parametrize("alpha", [0, -4, float("nan"), float("inf")])
 def test_a_target_alpha_must_be_positive(tmp_path, alpha):
     from mflux.models.common.training.state.training_spec import TrainingSpec
 
@@ -168,5 +180,32 @@ def test_a_target_alpha_must_be_positive(tmp_path, alpha):
         "checkpoint": {"output_path": str(tmp_path / "out"), "save_frequency": 10},
         "lora_layers": {"targets": [{"module_path": "proj", "rank": 4, "alpha": alpha}]},
     }  # fmt: off
-    with pytest.raises(ValueError, match="'alpha' must be > 0"):
+    with pytest.raises(ValueError, match="'alpha' must be a number > 0"):
         TrainingSpec.from_conf(conf, str(tmp_path / "train.json"), new_folder=False)
+
+
+class _ZImageGlobals(nn.Module):
+    # The Z-Image global targets, under the transformer's module paths
+    def __init__(self):
+        super().__init__()
+        self.all_x_embedder = {"2-1": nn.Linear(8, 8)}
+        self.all_final_layer = {"2-1": _Model()}
+        self.all_final_layer["2-1"].linear = nn.Linear(8, 8)
+        self.cap_embedder = [nn.Identity(), nn.Linear(8, 8)]
+
+
+@pytest.mark.parametrize("module_path", ["all_x_embedder.2-1", "all_final_layer.2-1.linear", "cap_embedder.1"])
+def test_z_image_global_targets_load_at_the_trained_alpha(tmp_path, module_path):
+    # The trainer saves .alpha for these too; without an alpha pattern they loaded at alpha = rank
+    from mflux.models.z_image.weights.z_image_lora_mapping import ZImageLoRAMapping
+
+    trained = _trained_lora(ALPHA / RANK)
+    path = tmp_path / "adapter.safetensors"
+    mx.save_safetensors(str(path), TrainingUtil.lora_weights(f"diffusion_model.{module_path}", trained))
+    x = mx.random.normal((1, 8))
+    for role in (None, "train"):
+        model = _ZImageGlobals()
+        LoRALoader.load_and_apply_lora(ZImageLoRAMapping.get_mapping(), model, [str(path)], [1.0], role=role, bake_lora=False)  # fmt: off
+        layer = LoRALoader._get_target_module(model, module_path)
+        expected = layer.linear(x) + ALPHA / RANK * (x @ trained.lora_A @ trained.lora_B)
+        assert mx.allclose(layer(x), expected, atol=1e-5).item(), role
