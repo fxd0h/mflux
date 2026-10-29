@@ -52,8 +52,11 @@ class AnimaTransformer(nn.Module):
         adaln_lora = self.t_embedder[1](emb)[:, None]
         emb = self.t_embedding_norm(emb)[:, None]
         rope = self.rope(height // self.patch_size, width // self.patch_size)
+        # Training recomputes each block in the backward pass instead of keeping its activations
+        gradient_checkpointing = getattr(self, "gradient_checkpointing", False)
         for block in self.blocks:
-            x = block(x, emb, adaln_lora, context, rope)
+            run = nn.utils.checkpoint(block) if gradient_checkpointing else block
+            x = run(x, emb, adaln_lora, context, rope)
         x = self.final_layer(x, emb, adaln_lora)
         return self._unpatchify(x, channels, height, width)
 
