@@ -54,11 +54,24 @@ class IrisFewStepScheduler:
         return (1 - next_sigma) * clean + next_sigma * noise, clean
 
     @staticmethod
-    def _metadata(path: str) -> dict:
+    def refuse_turbo_svd(paths: list[str] | None) -> None:
+        # Aikimi/iris-3b-turbo-svd-lora: an SVD of turbo - base plus dense.* tensors that replace base ones, sampled
+        # with the Turbo times. Loaded as a LoRA it drops the dense tensors and gives a broken image
+        for path in paths or []:
+            header = IrisFewStepScheduler._header(path)
+            svd = (header.get("__metadata__") or {}).get("format") == "iris-turbo-svd-v1"
+            if svd or any(key.startswith("dense.") for key in header):
+                raise ValueError(f"{path} is an Iris Turbo SVD file (iris-turbo-svd-v1, dense.* tensors), which mflux cannot load yet. Use --model iris-3b for Turbo.")  # fmt: off
+
+    @staticmethod
+    def _header(path: str) -> dict:
         with open(path, "rb") as file:
             length = struct.unpack("<Q", file.read(8))[0]
-            header = json.loads(file.read(length))
-        metadata = dict(header.get("__metadata__") or {})
+            return json.loads(file.read(length))
+
+    @staticmethod
+    def _metadata(path: str) -> dict:
+        metadata = dict(IrisFewStepScheduler._header(path).get("__metadata__") or {})
         # extra is free-form JSON: anything but an object ("null", a list) records no sampler
         try:
             extra = json.loads(metadata.get("extra", "{}"))

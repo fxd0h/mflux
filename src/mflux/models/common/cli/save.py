@@ -198,6 +198,11 @@ def main():
     if args.lora_paths and "lora_paths" not in accepted:
         parser.error(f"argument --lora: mflux-save cannot apply LoRA weights to {key}; mflux has no LoRA support for that model.")  # fmt: skip
     lora_kwargs = {name: value for name, value in lora_init_kwargs_from_args(args).items() if name in accepted}
+    if model_class is Iris and args.lora_paths:
+        try:
+            Iris.check_save(model_config, LoraResolution.resolve_paths(args.lora_paths), args.lora_scales)
+        except ValueError as error:
+            parser.error(f"argument --lora: {error}")
     model = model_class(
         quantize=args.quantize,
         **lora_kwargs,

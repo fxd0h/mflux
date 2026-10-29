@@ -1,6 +1,7 @@
 from mflux.callbacks.callback_registry import CallbackRegistry
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
+from mflux.models.common.resolution.lora_resolution import LoraResolution
 from mflux.models.common.tokenizer import TokenizerLoader
 from mflux.models.common.weights.loading.loaded_weights import LoadedWeights, MetaData
 from mflux.models.common.weights.loading.weight_applier import WeightApplier
@@ -87,6 +88,7 @@ class IrisInitializer:
 
     @staticmethod
     def _apply_loras(model, weights: LoadedWeights, lora_paths, lora_scales, bake_lora: bool) -> None:
+        IrisFewStepScheduler.refuse_turbo_svd(LoraResolution.resolve_paths(lora_paths))
         model.lora_paths, model.lora_scales = LoRALoader.load_and_apply_lora(
             lora_mapping=IrisLoRAMapping.get_mapping(),
             transformer=model.transformer,
