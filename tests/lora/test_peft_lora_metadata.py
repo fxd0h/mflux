@@ -155,3 +155,41 @@ class TestPeftLoRAMetadata:
 
 def _metadata(config: dict) -> dict[str, str]:
     return {"format": "pt", "lora_adapter_metadata": json.dumps(config)}
+
+
+class TestFileRankAndAlpha:
+    # Some trainers record one rank and alpha for the whole file in its metadata (the Iris few-step fork, the MOSS
+    # few-step LoRAs). It sets the scale only for layers without their own .alpha, on any model
+    TARGET = [
+        LoRATarget(
+            model_path="proj_out",
+            possible_up_patterns=["proj_out.lora_up.weight"],
+            possible_down_patterns=["proj_out.lora_down.weight"],
+            possible_alpha_patterns=["proj_out.alpha"],
+        )
+    ]
+
+    def _scale(self, tmp_path, metadata: dict[str, str], per_layer_alpha: float | None = None) -> float:
+        down = mx.random.normal((2, 8), key=mx.random.key(0)) * 0.1
+        up = mx.random.normal((8, 2), key=mx.random.key(1)) * 0.1
+        weights = {"proj_out.lora_down.weight": down, "proj_out.lora_up.weight": up}
+        if per_layer_alpha is not None:
+            weights["proj_out.alpha"] = mx.array(per_layer_alpha)
+        path = tmp_path / "lora.safetensors"
+        mx.save_safetensors(str(path), weights, metadata=metadata)
+        model = _Toy({name: mx.zeros((8, 8)) for name in MODULES})
+        LoRALoader.load_and_apply_lora(self.TARGET, model, [str(path)], [1.0], bake_lora=True)
+        # The base weight is zero, so the baked weight is scale * up @ down
+        delta = up @ down
+        return float((model.proj_out.weight * delta).sum() / (delta * delta).sum())
+
+    def test_the_file_alpha_sets_the_scale_of_layers_without_their_own(self, tmp_path):
+        assert self._scale(tmp_path, {"rank": "2", "alpha": "4.0"}) == pytest.approx(2.0, abs=1e-2)
+        assert self._scale(tmp_path, {}) == pytest.approx(1.0, abs=1e-2)
+
+    def test_a_layer_alpha_wins_over_the_file_alpha(self, tmp_path):
+        assert self._scale(tmp_path, {"rank": "2", "alpha": "4.0"}, per_layer_alpha=1.0) == pytest.approx(0.5, abs=1e-2)  # fmt: off
+
+    @pytest.mark.parametrize("metadata", [{"alpha": "4.0"}, {"rank": "2", "alpha": "nan"}, {"rank": "0", "alpha": "4"}, {"rank": "two", "alpha": "4"}])  # fmt: off
+    def test_an_incomplete_or_invalid_pair_is_ignored(self, tmp_path, metadata):
+        assert self._scale(tmp_path, metadata) == pytest.approx(1.0, abs=1e-2)
