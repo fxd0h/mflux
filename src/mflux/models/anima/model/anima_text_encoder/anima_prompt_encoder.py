@@ -21,8 +21,9 @@ class AnimaPromptEncoder:
     ) -> mx.array:
         # The prompt goes in twice: Qwen3 token ids for the encoder (no special tokens), and T5 token ids (with the
         # closing </s>) for the adapter that turns the Qwen3 states into the transformer's context.
-        # weighted=False reads ComfyUI's (text:1.2) syntax as plain text, as training captions are
-        parts = AnimaPromptWeights.parse(prompt) if weighted else [(prompt, 1.0)]
+        # weighted=False reads ComfyUI's (text:1.2) syntax as plain text, as training captions are. Their escaped
+        # parentheses still become literal ones, so a caption trains on the text a prompt with the same tags gives
+        parts = AnimaPromptWeights.parse(prompt) if weighted else [(AnimaPromptWeights.unescape(prompt), 1.0)]
         if AnimaPromptWeights.is_plain(parts):
             text = parts[0][0] if parts else ""
             qwen_ids = qwen_tokenizer.tokenize(text, keep_empty=True).input_ids
